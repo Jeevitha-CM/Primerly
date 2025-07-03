@@ -661,16 +661,58 @@ def process_sequence_by_region(sequence, target_region, custom_start=None, custo
 
 @app.route('/design', methods=['POST'])
 def design_primers():
-    # Example: Replace this with your actual primer design logic
     sequence = request.form.get('sequence', '').strip().upper()
     mode = request.form.get('mode', 'beginner')
     experiment_type = request.form.get('experiment_type', 'standard_pcr')
     target_region = request.form.get('target_region', 'full_gene')
     custom_start = request.form.get('custom_start')
     custom_end = request.form.get('custom_end')
-    # Dummy primers for demonstration; replace with real logic
-    primers = [{"forward": "ATCG", "reverse": "CGAT", "product_size": 100}]
     sequence_length = len(sequence)
+
+    # Basic validation
+    if not sequence or len(sequence) < 50:
+        error = "Please enter a valid DNA sequence (at least 50 bp)."
+        return render_template('index.html', error=error)
+
+    # Use primer3 to design primers
+    try:
+        primer3_result = primer3.bindings.designPrimers(
+            {
+                'SEQUENCE_ID': 'user_seq',
+                'SEQUENCE_TEMPLATE': sequence,
+            },
+            {
+                'PRIMER_OPT_SIZE': 20,
+                'PRIMER_PICK_INTERNAL_OLIGO': 0,
+                'PRIMER_MIN_SIZE': 18,
+                'PRIMER_MAX_SIZE': 25,
+                'PRIMER_OPT_TM': 60.0,
+                'PRIMER_MIN_TM': 57.0,
+                'PRIMER_MAX_TM': 63.0,
+                'PRIMER_MIN_GC': 40.0,
+                'PRIMER_MAX_GC': 60.0,
+                'PRIMER_PRODUCT_SIZE_RANGE': [[100, 300]],
+                'PRIMER_NUM_RETURN': 5
+            }
+        )
+        primers = []
+        num_returned = int(primer3_result.get('PRIMER_PAIR_NUM_RETURNED', 0))
+        for i in range(num_returned):
+            fwd = primer3_result[f'PRIMER_LEFT_{i}_SEQUENCE']
+            rev = primer3_result[f'PRIMER_RIGHT_{i}_SEQUENCE']
+            product_size = primer3_result[f'PRIMER_PAIR_{i}_PRODUCT_SIZE']
+            primers.append({
+                'forward': fwd,
+                'reverse': rev,
+                'product_size': product_size
+            })
+        if not primers:
+            error = "Failed to design primers. Please try a different sequence or adjust parameters."
+            return render_template('index.html', error=error)
+    except Exception as e:
+        error = f"Failed to design primers: {str(e)}"
+        return render_template('index.html', error=error)
+
     return render_template('post_results.html',
         primers_json=json.dumps(primers),
         sequence=sequence,

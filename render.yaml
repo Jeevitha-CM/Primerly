@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: primerly-biovagon
+    runtime: python
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn app:app  # or change if your main file is different
+    pythonVersion: 3.10.13 

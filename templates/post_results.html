@@ -1,0 +1,10 @@
+<form id="resultForm" method="POST" action="/results">
+  <input type="hidden" name="primers" value='{{ primers_json|safe }}' />
+  <input type="hidden" name="sequence" value="{{ sequence }}" />
+  <input type="hidden" name="sequence_length" value="{{ sequence_length }}" />
+  <input type="hidden" name="experiment_type" value="{{ experiment_type }}" />
+  <input type="hidden" name="mode" value="{{ mode }}" />
+</form>
+<script>
+  document.getElementById('resultForm').submit();
+</script> 

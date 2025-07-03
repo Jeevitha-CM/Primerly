@@ -1,0 +1,4 @@
+Flask==2.3.3
+primer3-py==0.6.1
+biopython==1.81
+gunicorn==21.2.0 

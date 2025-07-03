@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Primerly – PCR Primer Design Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f8fafc; }
+        .score-label { font-size: 1.1em; font-weight: bold; }
+        .explanation-list { font-size: 0.95em; }
+        .tooltip-inner { max-width: 350px; }
+    </style>
+    <script>
+        // Disable right-click context menu
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            return false;
+        });
+        
+        // Disable keyboard shortcuts for developer tools
+        document.addEventListener('keydown', function(e) {
+            // Disable F12 key
+            if (e.key === 'F12') {
+                e.preventDefault();
+                return false;
+            }
+            
+            // Disable Ctrl+Shift+I (Developer Tools)
+            if (e.ctrlKey && e.shiftKey && e.key === 'I') {
+                e.preventDefault();
+                return false;
+            }
+            
+            // Disable Ctrl+Shift+J (Console)
+            if (e.ctrlKey && e.shiftKey && e.key === 'J') {
+                e.preventDefault();
+                return false;
+            }
+            
+            // Disable Ctrl+U (View Source)
+            if (e.ctrlKey && e.key === 'u') {
+                e.preventDefault();
+                return false;
+            }
+            
+            // Disable Ctrl+Shift+C (Inspect Element)
+            if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        // Disable console access
+        console.log = function() {};
+        console.info = function() {};
+        console.warn = function() {};
+        console.error = function() {};
+        console.debug = function() {};
+        
+        // Disable alert override attempts
+        window.alert = function() {};
+        
+        // Disable eval
+        window.eval = function() {};
+        
+        // Disable Function constructor
+        window.Function = function() {};
+    </script>
+</head>
+<body>
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 col-md-10">
+            <div class="text-center mb-4">
+                <h1 class="display-5 fw-bold">Primerly</h1>
+                <p class="lead">Beginner-friendly PCR primer design and learning tool</p>
+                <a href="/learn" class="btn btn-outline-info">Learn Primer Design Theory</a>
+            </div>
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <form id="primer-form">
+                        <div class="mb-3">
+                            <label for="accession" class="form-label">NCBI Accession Number <span class="text-muted">(optional)</span></label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="accession" placeholder="e.g. NM_000546">
+                                <button class="btn btn-outline-secondary" type="button" id="fetch-seq-btn">Fetch Sequence</button>
+                            </div>
+                            <div class="form-text">Or paste a DNA sequence below.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sequence" class="form-label">DNA Sequence</label>
+                            <textarea class="form-control" id="sequence" rows="4" placeholder="Paste your DNA sequence here (A, T, C, G, N only)"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="experiment_type" class="form-label">Experiment Type</label>
+                            <select class="form-select" id="experiment_type">
+                                <option value="standard_pcr" selected>Standard PCR</option>
+                                <option value="qpcr">qPCR (Real-time PCR)</option>
+                            </select>
+                            <div class="form-text" id="experiment-description">
+                                Standard PCR amplifies DNA for analysis. Good for general molecular biology work.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="target_region" class="form-label">Target Region</label>
+                            <select class="form-select" id="target_region">
+                                <option value="full_gene" selected>Full Gene</option>
+                                <option value="cds">CDS (Coding Sequence)</option>
+                                <option value="3utr">3' UTR</option>
+                                <option value="custom">Custom Coordinates</option>
+                            </select>
+                            <div class="form-text">Select the region of the gene to target for primer design.</div>
+                        </div>
+                        <div class="mb-3" id="custom-coords" style="display: none;">
+                            <label for="custom_start" class="form-label">Custom Coordinates</label>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <input type="number" class="form-control" id="custom_start" placeholder="Start position">
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="number" class="form-control" id="custom_end" placeholder="End position">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="mode" class="form-label">Mode</label>
+                            <select class="form-select" id="mode">
+                                <option value="beginner" selected>Beginner Mode</option>
+                                <option value="expert">Expert Mode</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Design Primers</button>
+                    </form>
+                </div>
+            </div>
+            <div id="error-message" class="alert alert-danger d-none"></div>
+            <footer class="text-center text-muted mt-4">
+                <p>&copy; 2025 Primerly - A Biovagon Initiative | Version 1.0.0 | MIT License</p>
+                <p class="small">
+                    <a href="/learn" class="text-decoration-none">Learn More</a> | 
+                    <a href="/version" class="text-decoration-none">Version Info</a> |
+                    <a href="https://www.biovagon.org/" target="_blank" class="text-decoration-none">Biovagon</a>
+                </p>
+            </footer>
+        </div>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const form = document.getElementById('primer-form');
+const accessionInput = document.getElementById('accession');
+const fetchSeqBtn = document.getElementById('fetch-seq-btn');
+const sequenceInput = document.getElementById('sequence');
+const experimentTypeSelect = document.getElementById('experiment_type');
+const experimentDescription = document.getElementById('experiment-description');
+const targetRegionSelect = document.getElementById('target_region');
+const customCoords = document.getElementById('custom-coords');
+const modeSelect = document.getElementById('mode');
+const errorMessage = document.getElementById('error-message');
+
+function showError(msg) {
+    errorMessage.textContent = msg;
+    errorMessage.classList.remove('d-none');
+}
+function clearError() {
+    errorMessage.classList.add('d-none');
+}
+
+// Experiment type descriptions
+const experimentDescriptions = {
+    'standard_pcr': 'Standard PCR amplifies DNA for analysis. Good for general molecular biology work. Targets 200-1000 bp amplicons.',
+    'qpcr': 'qPCR (Real-time PCR) measures gene expression in real-time. Automatically targets 3\' UTR region with small amplicons (<200 bp) for accurate quantification.'
+};
+
+// Update experiment description when selection changes
+experimentTypeSelect.addEventListener('change', () => {
+    const selectedType = experimentTypeSelect.value;
+    experimentDescription.textContent = experimentDescriptions[selectedType];
+    
+    // For qPCR, automatically set target region to 3' UTR and disable selection
+    if (selectedType === 'qpcr') {
+        targetRegionSelect.value = '3utr';
+        targetRegionSelect.disabled = true;
+        targetRegionSelect.style.backgroundColor = '#e9ecef';
+        // Hide custom coordinates if they were shown
+        customCoords.style.display = 'none';
+    } else {
+        targetRegionSelect.disabled = false;
+        targetRegionSelect.style.backgroundColor = '';
+        // Reset to full gene for standard PCR
+        targetRegionSelect.value = 'full_gene';
+    }
+});
+
+fetchSeqBtn.addEventListener('click', async () => {
+    const accession = accessionInput.value.trim();
+    if (!accession) {
+        showError('Please enter an accession number.');
+        return;
+    }
+    fetchSeqBtn.disabled = true;
+    fetchSeqBtn.textContent = 'Fetching...';
+    clearError();
+    try {
+        const res = await fetch('/fetch-sequence', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accession })
+        });
+        const data = await res.json();
+        if (data.error) {
+            showError(data.error);
+            sequenceInput.value = '';
+        } else {
+            sequenceInput.value = data.sequence;
+            sequenceInput.readOnly = true;
+            showError('');
+        }
+    } catch (e) {
+        showError('Failed to fetch sequence.');
+    }
+    fetchSeqBtn.disabled = false;
+    fetchSeqBtn.textContent = 'Fetch Sequence';
+});
+
+accessionInput.addEventListener('input', () => {
+    if (!accessionInput.value.trim()) {
+        sequenceInput.readOnly = false;
+        sequenceInput.value = '';
+    }
+});
+
+targetRegionSelect.addEventListener('change', () => {
+    if (targetRegionSelect.value === 'custom') {
+        customCoords.style.display = 'block';
+    } else {
+        customCoords.style.display = 'none';
+    }
+});
+
+modeSelect.addEventListener('change', () => {
+    // No need to show learn more section as it's removed
+});
+
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearError();
+    const sequence = sequenceInput.value.trim();
+    const mode = modeSelect.value;
+    const experimentType = experimentTypeSelect.value;
+    let targetRegion = targetRegionSelect.value;
+    const customStart = document.getElementById('custom_start').value;
+    const customEnd = document.getElementById('custom_end').value;
+    
+    // For qPCR, always use 3' UTR as target region
+    if (experimentType === 'qpcr') {
+        targetRegion = '3utr';
+    }
+    
+    if (!sequence) {
+        showError('Please enter a DNA sequence.');
+        return;
+    }
+    try {
+        const res = await fetch('/design', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sequence, mode, experiment_type: experimentType, target_region: targetRegion, custom_start: customStart, custom_end: customEnd })
+        });
+        const data = await res.json();
+        if (data.error) {
+            showError(data.error);
+            return;
+        }
+        // Redirect to results page
+        if (data.redirect) {
+            window.location.href = data.redirect;
+        }
+    } catch (e) {
+        showError('Failed to design primers.');
+    }
+});
+</script>
+</body>
+</html> 

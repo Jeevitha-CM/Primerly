@@ -667,52 +667,43 @@ def design_primers():
     target_region = request.form.get('target_region', 'full_gene')
     custom_start = request.form.get('custom_start')
     custom_end = request.form.get('custom_end')
-    sequence_length = len(sequence)
 
-    # Basic validation
-    if not sequence or len(sequence) < 50:
-        error = "Please enter a valid DNA sequence (at least 50 bp)."
-        return render_template('index.html', error=error)
-
-    # Use primer3 to design primers
-    try:
-        primer3_result = primer3.bindings.designPrimers(
-            {
-                'SEQUENCE_ID': 'user_seq',
-                'SEQUENCE_TEMPLATE': sequence,
-            },
-            {
-                'PRIMER_OPT_SIZE': 20,
-                'PRIMER_PICK_INTERNAL_OLIGO': 0,
-                'PRIMER_MIN_SIZE': 18,
-                'PRIMER_MAX_SIZE': 25,
-                'PRIMER_OPT_TM': 60.0,
-                'PRIMER_MIN_TM': 57.0,
-                'PRIMER_MAX_TM': 63.0,
-                'PRIMER_MIN_GC': 40.0,
-                'PRIMER_MAX_GC': 60.0,
-                'PRIMER_PRODUCT_SIZE_RANGE': [[100, 300]],
-                'PRIMER_NUM_RETURN': 5
-            }
-        )
-        primers = []
-        num_returned = int(primer3_result.get('PRIMER_PAIR_NUM_RETURNED', 0))
-        for i in range(num_returned):
-            fwd = primer3_result[f'PRIMER_LEFT_{i}_SEQUENCE']
-            rev = primer3_result[f'PRIMER_RIGHT_{i}_SEQUENCE']
-            product_size = primer3_result[f'PRIMER_PAIR_{i}_PRODUCT_SIZE']
+    # --- Real primer design logic (restored) ---
+    # This is a simplified version; you may want to use your full logic from before
+    import primer3
+    import re
+    primers = []
+    if not sequence or not re.match(r'^[ATCGN]+$', sequence):
+        return render_template('index.html', error="Invalid or missing DNA sequence.")
+    if len(sequence) < 50:
+        return render_template('index.html', error="Sequence too short. Please provide at least 50 nucleotides.")
+    # Example: design a single primer pair (you can expand this logic)
+    primer3_config = {
+        'SEQUENCE_TEMPLATE': sequence,
+        'PRIMER_TASK': 'generic',
+        'PRIMER_PICK_LEFT_PRIMER': 1,
+        'PRIMER_PICK_RIGHT_PRIMER': 1,
+        'PRIMER_OPT_SIZE': 20,
+        'PRIMER_MIN_SIZE': 18,
+        'PRIMER_MAX_SIZE': 25,
+        'PRIMER_OPT_TM': 60.0,
+        'PRIMER_MIN_TM': 57.0,
+        'PRIMER_MAX_TM': 63.0,
+        'PRIMER_MIN_GC': 20.0,
+        'PRIMER_MAX_GC': 80.0,
+        'PRIMER_PRODUCT_SIZE_RANGE': [[200, 1000]]
+    }
+    result = primer3.bindings.design_primers(primer3_config, global_args={})
+    if 'PRIMER_PAIR_NUM_RETURNED' in result and result['PRIMER_PAIR_NUM_RETURNED'] > 0:
+        for i in range(result['PRIMER_PAIR_NUM_RETURNED']):
             primers.append({
-                'forward': fwd,
-                'reverse': rev,
-                'product_size': product_size
+                'forward': result.get(f'PRIMER_LEFT_{i}_SEQUENCE', ''),
+                'reverse': result.get(f'PRIMER_RIGHT_{i}_SEQUENCE', ''),
+                'product_size': result.get(f'PRIMER_PAIR_{i}_PRODUCT_SIZE', 0)
             })
-        if not primers:
-            error = "Failed to design primers. Please try a different sequence or adjust parameters."
-            return render_template('index.html', error=error)
-    except Exception as e:
-        error = f"Failed to design primers: {str(e)}"
-        return render_template('index.html', error=error)
-
+    else:
+        return render_template('index.html', error="No suitable primer pairs found. Try a longer sequence or different parameters.")
+    sequence_length = len(sequence)
     return render_template('post_results.html',
         primers_json=json.dumps(primers),
         sequence=sequence,

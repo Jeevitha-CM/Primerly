@@ -12,7 +12,7 @@ Author: Jeevitha C M (Founder of Biovagon)
 Website: https://www.biovagon.org/
 """
 
-from flask import Flask, render_template, request, jsonify, send_file, redirect
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
 from Bio import Entrez
 from Bio.Seq import Seq
 import primer3
@@ -21,6 +21,7 @@ import io
 import re
 from datetime import datetime
 from collections import defaultdict
+import uuid
 
 # Application metadata
 __version__ = "1.0.0"
@@ -35,6 +36,9 @@ app.secret_key = 'your-secret-key-here'
 
 # Set email for NCBI Entrez (required)
 Entrez.email = "jeevithacm21@gmail.com"
+
+# TEMPORARY in-memory storage (use DB for production)
+result_store = {}
 
 def fetch_sequence_from_ncbi(accession):
     """Fetch DNA sequence from NCBI using accession number"""
@@ -277,7 +281,7 @@ def fetch_sequence():
 def get_highlighted_sequence(sequence, primers, primer_index=0, orf_info=None, utr_info=None):
     """Return a list of dicts: {char, color_class} for each base in sequence, highlighting specific primer positions."""
     seq_len = len(sequence)
-    highlight = [None] * seq_len
+    highlight = [''] * seq_len
     
     # Define colors for each primer pair
     primer_colors = [
@@ -668,6 +672,11 @@ def design_primers():
     custom_start = data.get('custom_start')
     custom_end = data.get('custom_end')
     
+    # Always define these, even if not used
+    orf_info = None
+    utr_info = None
+    individual_highlighted_sequences = []
+
     # For qPCR, always use 3' UTR as target region
     if experiment_type == 'qpcr':
         target_region = '3utr'
@@ -1243,19 +1252,20 @@ def design_primers():
         if target_region == 'full_gene':
             top_primers.sort(key=lambda x: x['score'], reverse=True)
         
-        # Redirect to results page with data
-        import json
-        import urllib.parse
-        primers_json = urllib.parse.quote(json.dumps(top_primers))
-        sequence_json = urllib.parse.quote(processed_sequence)
-        original_sequence_json = urllib.parse.quote(sequence)
-        
-        # Add ORF information if available
-        orf_json = urllib.parse.quote(json.dumps(orf_info)) if orf_info else ""
-        
-        return jsonify({
-            'redirect': f'/results?primers={primers_json}&sequence_length={len(processed_sequence)}&experiment_type={experiment_type}&sequence={sequence_json}&original_sequence={original_sequence_json}&orf_info={orf_json}&mode={mode}'
-        })
+        # Store everything
+        result_id = str(uuid.uuid4())
+        result_store[result_id] = {
+            'primers': top_primers,
+            'sequence': processed_sequence,
+            'sequence_length': len(processed_sequence) if processed_sequence else 0,
+            'experiment_type': experiment_type,
+            'mode': mode,
+            'orf_info': orf_info,
+            'utr_info': utr_info,
+            'individual_highlighted_sequences': individual_highlighted_sequences
+        }
+        # Redirect to result page with short ID
+        return jsonify({'redirect': f'/result/{result_id}'})
         
     except Exception as e:
         return jsonify({'error': f'Error designing primers: {str(e)}'})
@@ -1407,6 +1417,22 @@ def version():
 def learn():
     """Display primer design theory and educational content"""
     return render_template('learn.html')
+
+@app.route('/result/<result_id>')
+def show_results(result_id):
+    data = result_store.get(result_id)
+    if not data:
+        return "Result not found", 404
+    return render_template('results.html',
+        primers=data['primers'],
+        sequence=data['sequence'],
+        sequence_length=data['sequence_length'],
+        experiment_type=data['experiment_type'],
+        mode=data['mode'],
+        orf_info=data.get('orf_info'),
+        utr_info=data.get('utr_info'),
+        individual_highlighted_sequences=data.get('individual_highlighted_sequences')
+    )
 
 import os
 

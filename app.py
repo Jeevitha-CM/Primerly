@@ -705,18 +705,18 @@ def design_primers():
     if isinstance(processed_sequence, tuple):
         return jsonify({'error': processed_sequence[1]})
     
-    if processed_sequence and len(processed_sequence) < 50:
+    if len(processed_sequence) < 50:
         return jsonify({'error': 'Sequence too short. Please provide at least 50 nucleotides.'})
     
     try:
         # Configure primer3 parameters based on experiment type and target region
         if experiment_type == 'qpcr':
             # qPCR parameters: always target 3' UTR with small amplicons (<200 bp)
-            if orf_info and isinstance(orf_info, dict):
+            if orf_info:
                 # For 3' UTR qPCR, design primers to cover the 3' UTR region
-                utr_length = orf_info.get('length', 0)
-                utr_start = orf_info.get('start', 0)
-                utr_end = orf_info.get('end', 0)
+                utr_length = orf_info['length']
+                utr_start = orf_info['start']
+                utr_end = orf_info['end']
                 
                 # qPCR: smaller amplicons for efficiency, cover 50-80% of UTR
                 min_product_size = int(utr_length * 0.50)  # At least 50% of UTR
@@ -824,11 +824,11 @@ def design_primers():
                     'PRIMER_LEFT_INPUT': [0, 100],  # Forward primer in first 100bp
                     'PRIMER_RIGHT_INPUT': [sequence_length-100, sequence_length]  # Reverse primer in last 100bp
                 }
-            elif target_region == 'cds' and orf_info and isinstance(orf_info, dict):
+            elif target_region == 'cds' and orf_info:
                 # For CDS standard PCR, ensure primers cover the entire ORF
-                orf_length = orf_info.get('length', 0)
-                orf_start = orf_info.get('start', 0)
-                orf_end = orf_info.get('end', 0)
+                orf_length = orf_info['length']
+                orf_start = orf_info['start']
+                orf_end = orf_info['end']
                 
                 # Product size must be larger than ORF length and contain the entire ORF
                 min_product_size = orf_length  # At least the same as ORF length
@@ -856,11 +856,11 @@ def design_primers():
                     'PRIMER_MAX_GC': 80.0,
                     'PRIMER_PRODUCT_SIZE_RANGE': [[min_product_size, max_product_size]]
                 }
-            elif target_region == '3utr' and orf_info and isinstance(orf_info, dict):
+            elif target_region == '3utr' and orf_info:
                 # For 3' UTR standard PCR, design primers to cover the 3' UTR region
-                utr_length = orf_info.get('length', 0)
-                utr_start = orf_info.get('start', 0)
-                utr_end = orf_info.get('end', 0)
+                utr_length = orf_info['length']
+                utr_start = orf_info['start']
+                utr_end = orf_info['end']
                 
                 # Product size should cover most of the 3' UTR (80-95% coverage)
                 min_product_size = int(utr_length * 0.70)  # At least 70% of UTR

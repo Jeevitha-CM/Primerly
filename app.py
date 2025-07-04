@@ -12,7 +12,7 @@ Author: Jeevitha C M (Founder of Biovagon)
 Website: https://www.biovagon.org/
 """
 
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, send_file, redirect
 from Bio import Entrez
 from Bio.Seq import Seq
 import primer3
@@ -21,7 +21,6 @@ import io
 import re
 from datetime import datetime
 from collections import defaultdict
-import json
 
 # Application metadata
 __version__ = "1.0.0"
@@ -366,30 +365,29 @@ def get_highlighted_sequence(sequence, primers, primer_index=0, orf_info=None, u
     
     return result
 
-@app.route('/results', methods=['POST'])
+@app.route('/results')
 def results():
-    if request.is_json:
-        data = request.get_json()
-        primers = data['primers']
-        sequence = data['sequence']
-        sequence_length = data['sequence_length']
-        experiment_type = data['experiment_type']
-        mode = data['mode']
-    else:
-        primers = json.loads(request.form['primers'])
-        sequence = request.form['sequence']
-        sequence_length = request.form['sequence_length']
-        experiment_type = request.form['experiment_type']
-        mode = request.form['mode']
-    
+    """Display primer design results"""
     try:
         # Get results from session or query parameters
+        primers = request.args.get('primers', '[]')
+        try:
+            sequence_length = int(request.args.get('sequence_length', 0))
+        except (ValueError, TypeError):
+            sequence_length = 0
+        experiment_type = request.args.get('experiment_type', 'standard_pcr')
+        sequence = request.args.get('sequence', '')
         orf_info = request.args.get('orf_info', '')
+        mode = request.args.get('mode', 'beginner')
         
         print(f"DEBUG: Results route called")
         print(f"DEBUG: primers length: {len(primers)}")
         print(f"DEBUG: sequence length: {len(sequence)}")
         print(f"DEBUG: orf_info length: {len(orf_info)}")
+        
+        import json
+        primers_data = json.loads(primers)
+        print(f"DEBUG: Parsed {len(primers_data)} primers")
         
         # Parse ORF information if available
         orf_data = None
@@ -414,14 +412,14 @@ def results():
         print(f"DEBUG: Sequence preview: {sequence[:100]}...")
         if orf_data:
             print(f"DEBUG: ORF info: {orf_data}")
-        for i, primer in enumerate(primers):
+        for i, primer in enumerate(primers_data):
             print(f"DEBUG: Primer {i+1} positions:")
             print(f"  Forward: {primer['forward_start']}-{primer['forward_end']}")
             print(f"  Reverse: {primer['reverse_start']}-{primer['reverse_end']}")
         
         # Create individual highlighted sequences for each primer set
         individual_highlighted_sequences = []
-        for i, primer in enumerate(primers):
+        for i, primer in enumerate(primers_data):
             try:
                 # Create a list with only this primer highlighted, passing the correct index
                 individual_sequence = get_highlighted_sequence(sequence, [primer], i, orf_data, utr_data)
@@ -435,7 +433,7 @@ def results():
         
         # Create the main highlighted sequence (all primers)
         try:
-            highlighted_sequence = get_highlighted_sequence(sequence, primers, 0, orf_data, utr_data)
+            highlighted_sequence = get_highlighted_sequence(sequence, primers_data, 0, orf_data, utr_data)
             print(f"DEBUG: Created main highlighted sequence")
         except Exception as e:
             print(f"DEBUG: Error creating main highlighted sequence: {e}")
@@ -445,7 +443,7 @@ def results():
         print(f"DEBUG: About to render template")
         
         return render_template('results.html', 
-                             primers=primers, 
+                             primers=primers_data, 
                              sequence_length=sequence_length,
                              experiment_type=experiment_type,
                              sequence=sequence,
@@ -661,55 +659,606 @@ def process_sequence_by_region(sequence, target_region, custom_start=None, custo
 
 @app.route('/design', methods=['POST'])
 def design_primers():
-    sequence = request.form.get('sequence', '').strip().upper()
-    mode = request.form.get('mode', 'beginner')
-    experiment_type = request.form.get('experiment_type', 'standard_pcr')
-    target_region = request.form.get('target_region', 'full_gene')
-    custom_start = request.form.get('custom_start')
-    custom_end = request.form.get('custom_end')
-
-    # --- Real primer design logic (restored) ---
-    # This is a simplified version; you may want to use your full logic from before
-    import primer3
-    import re
-    primers = []
-    if not sequence or not re.match(r'^[ATCGN]+$', sequence):
-        return render_template('index.html', error="Invalid or missing DNA sequence.")
-    if len(sequence) < 50:
-        return render_template('index.html', error="Sequence too short. Please provide at least 50 nucleotides.")
-    # Example: design a single primer pair (you can expand this logic)
-    primer3_config = {
-        'SEQUENCE_TEMPLATE': sequence,
-        'PRIMER_TASK': 'generic',
-        'PRIMER_PICK_LEFT_PRIMER': 1,
-        'PRIMER_PICK_RIGHT_PRIMER': 1,
-        'PRIMER_OPT_SIZE': 20,
-        'PRIMER_MIN_SIZE': 18,
-        'PRIMER_MAX_SIZE': 25,
-        'PRIMER_OPT_TM': 60.0,
-        'PRIMER_MIN_TM': 57.0,
-        'PRIMER_MAX_TM': 63.0,
-        'PRIMER_MIN_GC': 20.0,
-        'PRIMER_MAX_GC': 80.0,
-        'PRIMER_PRODUCT_SIZE_RANGE': [[200, 1000]]
-    }
-    result = primer3.bindings.design_primers(primer3_config, global_args={})
-    if 'PRIMER_PAIR_NUM_RETURNED' in result and result['PRIMER_PAIR_NUM_RETURNED'] > 0:
-        for i in range(result['PRIMER_PAIR_NUM_RETURNED']):
-            primers.append({
-                'forward': result.get(f'PRIMER_LEFT_{i}_SEQUENCE', ''),
-                'reverse': result.get(f'PRIMER_RIGHT_{i}_SEQUENCE', ''),
-                'product_size': result.get(f'PRIMER_PAIR_{i}_PRODUCT_SIZE', 0)
-            })
+    """Design primers using primer3-py"""
+    data = request.get_json()
+    sequence = data.get('sequence', '').strip().upper()
+    mode = data.get('mode', 'beginner')
+    experiment_type = data.get('experiment_type', 'standard_pcr')
+    target_region = data.get('target_region', 'full_gene')
+    custom_start = data.get('custom_start')
+    custom_end = data.get('custom_end')
+    
+    # For qPCR, always use 3' UTR as target region
+    if experiment_type == 'qpcr':
+        target_region = '3utr'
+        print(f"DEBUG: qPCR experiment - automatically setting target region to 3' UTR")
+    
+    if not sequence:
+        return jsonify({'error': 'Please enter a DNA sequence'})
+    
+    # Validate sequence
+    if not re.match(r'^[ATCGN]+$', sequence):
+        return jsonify({'error': 'Invalid DNA sequence. Please use only A, T, C, G, and N characters.'})
+    
+    # Process sequence based on target region
+    processed_result = process_sequence_by_region(sequence, target_region, custom_start, custom_end)
+    
+    # Handle different return types
+    if isinstance(processed_result, tuple):
+        if len(processed_result) == 2:
+            processed_sequence, orf_info = processed_result
+        else:
+            return jsonify({'error': processed_result[1]})
     else:
-        return render_template('index.html', error="No suitable primer pairs found. Try a longer sequence or different parameters.")
-    sequence_length = len(sequence)
-    return render_template('post_results.html',
-        primers_json=json.dumps(primers),
-        sequence=sequence,
-        sequence_length=sequence_length,
-        experiment_type=experiment_type,
-        mode=mode)
+        processed_sequence = processed_result
+        orf_info = None
+    
+    if isinstance(processed_sequence, tuple):
+        return jsonify({'error': processed_sequence[1]})
+    
+    if len(processed_sequence) < 50:
+        return jsonify({'error': 'Sequence too short. Please provide at least 50 nucleotides.'})
+    
+    try:
+        # Configure primer3 parameters based on experiment type and target region
+        if experiment_type == 'qpcr':
+            # qPCR parameters: always target 3' UTR with small amplicons (<200 bp)
+            if orf_info:
+                # For 3' UTR qPCR, design primers to cover the 3' UTR region
+                utr_length = orf_info['length']
+                utr_start = orf_info['start']
+                utr_end = orf_info['end']
+                
+                # qPCR: smaller amplicons for efficiency, cover 50-80% of UTR
+                min_product_size = int(utr_length * 0.50)  # At least 50% of UTR
+                max_product_size = int(utr_length * 0.80)  # Up to 80% of UTR
+                
+                # Ensure valid range and qPCR size limits (always <200bp)
+                # First ensure min < max
+                if min_product_size >= max_product_size:
+                    min_product_size = max(80, utr_length // 3)
+                    max_product_size = min(200, utr_length)
+                
+                # Then apply qPCR size constraints
+                min_product_size = max(80, min_product_size)
+                max_product_size = min(200, max_product_size)
+                
+                # Final validation: ensure min < max
+                if min_product_size >= max_product_size:
+                    # If still invalid, use safe defaults
+                    min_product_size = 80
+                    max_product_size = min(200, utr_length)
+                    if min_product_size >= max_product_size:
+                        max_product_size = min_product_size + 50  # Ensure at least 50bp difference
+                
+                print(f"DEBUG: qPCR 3' UTR - UTR: {utr_start}-{utr_end} ({utr_length}bp), Min: {min_product_size}, Max: {max_product_size}")
+                
+                # Use the 3' UTR sequence for primer design
+                utr_sequence = sequence[utr_start:utr_end]
+                
+                primer3_config = {
+                    'SEQUENCE_TEMPLATE': utr_sequence,
+                    'PRIMER_TASK': 'generic',
+                    'PRIMER_PICK_LEFT_PRIMER': 1,
+                    'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_OPT_SIZE': 20,
+                    'PRIMER_MIN_SIZE': 18,
+                    'PRIMER_MAX_SIZE': 25,
+                    'PRIMER_OPT_TM': 60.0,
+                    'PRIMER_MIN_TM': 58.0,
+                    'PRIMER_MAX_TM': 62.0,
+                    'PRIMER_MIN_GC': 30.0,
+                    'PRIMER_MAX_GC': 70.0,
+                    'PRIMER_PRODUCT_SIZE_RANGE': [[min_product_size, max_product_size]],
+                    'PRIMER_MAX_HAIRPIN_TH': 2.0,
+                    'PRIMER_MAX_SELF_ANY_TH': 2.0,
+                    'PRIMER_MAX_SELF_END_TH': 2.0,
+                    'PRIMER_PAIR_MAX_COMPL_ANY_TH': 2.0,
+                    'PRIMER_PAIR_MAX_COMPL_END_TH': 2.0
+                }
+            else:
+                # Fallback: if no ORF found, use full sequence with qPCR constraints
+                print(f"DEBUG: qPCR - No ORF found, using full sequence with qPCR constraints [80, 200]")
+                primer3_config = {
+                    'SEQUENCE_TEMPLATE': processed_sequence,
+                    'PRIMER_TASK': 'generic',
+                    'PRIMER_PICK_LEFT_PRIMER': 1,
+                    'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_OPT_SIZE': 20,
+                    'PRIMER_MIN_SIZE': 18,
+                    'PRIMER_MAX_SIZE': 25,
+                    'PRIMER_OPT_TM': 60.0,
+                    'PRIMER_MIN_TM': 58.0,
+                    'PRIMER_MAX_TM': 62.0,
+                    'PRIMER_MIN_GC': 30.0,
+                    'PRIMER_MAX_GC': 70.0,
+                    'PRIMER_PRODUCT_SIZE_RANGE': [[80, 200]],
+                    'PRIMER_MAX_HAIRPIN_TH': 2.0,
+                    'PRIMER_MAX_SELF_ANY_TH': 2.0,
+                    'PRIMER_MAX_SELF_END_TH': 2.0,
+                    'PRIMER_PAIR_MAX_COMPL_ANY_TH': 2.0,
+                    'PRIMER_PAIR_MAX_COMPL_END_TH': 2.0
+                }
+        else:
+            # Standard PCR parameters
+            if target_region == 'full_gene':
+                # For full gene, design primers to cover maximum of the gene
+                sequence_length = len(sequence)
+                
+                # Standard PCR: Forward primer in first 50-100bp, reverse primer in last 50-100bp
+                # Target 85-95% gene coverage
+                min_product_size = int(sequence_length * 0.85)  # At least 85% of gene
+                max_product_size = int(sequence_length * 0.95)  # Up to 95% of gene
+                
+                # Ensure valid range
+                if min_product_size >= max_product_size:
+                    min_product_size = int(sequence_length * 0.80)
+                    max_product_size = int(sequence_length * 0.98)
+                
+                print(f"DEBUG: Standard PCR Full Gene - Sequence Length: {sequence_length}, Min: {min_product_size}, Max: {max_product_size}")
+                
+                # Use boundary constraints to position primers at beginning and end
+                primer3_config = {
+                    'SEQUENCE_TEMPLATE': sequence,
+                    'PRIMER_TASK': 'generic',
+                    'PRIMER_PICK_LEFT_PRIMER': 1,
+                    'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_OPT_SIZE': 20,
+                    'PRIMER_MIN_SIZE': 18,
+                    'PRIMER_MAX_SIZE': 25,
+                    'PRIMER_OPT_TM': 60.0,
+                    'PRIMER_MIN_TM': 57.0,
+                    'PRIMER_MAX_TM': 63.0,
+                    'PRIMER_MIN_GC': 20.0,
+                    'PRIMER_MAX_GC': 80.0,
+                    'PRIMER_PRODUCT_SIZE_RANGE': [[min_product_size, max_product_size]],
+                    'PRIMER_LEFT_INPUT': [0, 100],  # Forward primer in first 100bp
+                    'PRIMER_RIGHT_INPUT': [sequence_length-100, sequence_length]  # Reverse primer in last 100bp
+                }
+            elif target_region == 'cds' and orf_info:
+                # For CDS standard PCR, ensure primers cover the entire ORF
+                orf_length = orf_info['length']
+                orf_start = orf_info['start']
+                orf_end = orf_info['end']
+                
+                # Product size must be larger than ORF length and contain the entire ORF
+                min_product_size = orf_length  # At least the same as ORF length
+                max_product_size = orf_length + 200  # Allow extra nucleotides
+                
+                print(f"DEBUG: Standard PCR CDS - ORF: {orf_start}-{orf_end} ({orf_length}bp), Min: {min_product_size}, Max: {max_product_size}")
+                
+                # Forward primer must be before ORF start, reverse primer must be after ORF end
+                # Use sequence masking to prevent primers in ORF region
+                masked_sequence = sequence[:orf_start] + 'N' * (orf_end - orf_start) + sequence[orf_end:]
+                print(f"DEBUG: Masked ORF region {orf_start}-{orf_end} for primer design")
+                
+                primer3_config = {
+                    'SEQUENCE_TEMPLATE': masked_sequence,
+                    'PRIMER_TASK': 'generic',
+                    'PRIMER_PICK_LEFT_PRIMER': 1,
+                    'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_OPT_SIZE': 20,
+                    'PRIMER_MIN_SIZE': 18,
+                    'PRIMER_MAX_SIZE': 25,
+                    'PRIMER_OPT_TM': 60.0,
+                    'PRIMER_MIN_TM': 57.0,
+                    'PRIMER_MAX_TM': 63.0,
+                    'PRIMER_MIN_GC': 20.0,
+                    'PRIMER_MAX_GC': 80.0,
+                    'PRIMER_PRODUCT_SIZE_RANGE': [[min_product_size, max_product_size]]
+                }
+            elif target_region == '3utr' and orf_info:
+                # For 3' UTR standard PCR, design primers to cover the 3' UTR region
+                utr_length = orf_info['length']
+                utr_start = orf_info['start']
+                utr_end = orf_info['end']
+                
+                # Product size should cover most of the 3' UTR (80-95% coverage)
+                min_product_size = int(utr_length * 0.70)  # At least 70% of UTR
+                max_product_size = int(utr_length * 0.95)  # Up to 95% of UTR
+                
+                # Ensure valid range
+                if min_product_size >= max_product_size:
+                    min_product_size = max(200, utr_length // 2)
+                    max_product_size = utr_length
+                
+                print(f"DEBUG: Standard PCR 3' UTR - UTR: {utr_start}-{utr_end} ({utr_length}bp), Min: {min_product_size}, Max: {max_product_size}")
+                
+                # Use the 3' UTR sequence for primer design
+                utr_sequence = sequence[utr_start:utr_end]
+                
+                primer3_config = {
+                    'SEQUENCE_TEMPLATE': utr_sequence,
+                    'PRIMER_TASK': 'generic',
+                    'PRIMER_PICK_LEFT_PRIMER': 1,
+                    'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_OPT_SIZE': 20,
+                    'PRIMER_MIN_SIZE': 18,
+                    'PRIMER_MAX_SIZE': 25,
+                    'PRIMER_OPT_TM': 60.0,
+                    'PRIMER_MIN_TM': 57.0,
+                    'PRIMER_MAX_TM': 63.0,
+                    'PRIMER_MIN_GC': 20.0,
+                    'PRIMER_MAX_GC': 80.0,
+                    'PRIMER_PRODUCT_SIZE_RANGE': [[min_product_size, max_product_size]]
+                }
+            elif target_region == 'custom' and custom_start and custom_end:
+                # For custom coordinates, design primers within the specified region
+                try:
+                    start = int(custom_start) - 1  # Convert to 0-based indexing
+                    end = int(custom_end)
+                    custom_length = end - start
+                    
+                    if 0 <= start < end <= len(sequence):
+                        # Product size should cover most of the custom region
+                        min_product_size = int(custom_length * 0.80)  # At least 80% of custom region
+                        max_product_size = custom_length  # Up to 100% of custom region
+                        
+                        print(f"DEBUG: Standard PCR Custom - Region: {start+1}-{end} ({custom_length}bp), Min: {min_product_size}, Max: {max_product_size}")
+                        
+                        # Use the custom region sequence for primer design
+                        custom_sequence = sequence[start:end]
+                        
+                        primer3_config = {
+                            'SEQUENCE_TEMPLATE': custom_sequence,
+                            'PRIMER_TASK': 'generic',
+                            'PRIMER_PICK_LEFT_PRIMER': 1,
+                            'PRIMER_PICK_RIGHT_PRIMER': 1,
+                            'PRIMER_OPT_SIZE': 20,
+                            'PRIMER_MIN_SIZE': 18,
+                            'PRIMER_MAX_SIZE': 25,
+                            'PRIMER_OPT_TM': 60.0,
+                            'PRIMER_MIN_TM': 57.0,
+                            'PRIMER_MAX_TM': 63.0,
+                            'PRIMER_MIN_GC': 20.0,
+                            'PRIMER_MAX_GC': 80.0,
+                            'PRIMER_PRODUCT_SIZE_RANGE': [[min_product_size, max_product_size]]
+                        }
+                    else:
+                        return jsonify({'error': 'Custom coordinates out of range'})
+                except ValueError:
+                    return jsonify({'error': 'Invalid custom coordinates'})
+            else:
+                # Standard PCR parameters for other regions
+                print(f"DEBUG: Standard PCR Other - Using default range [200, 1000]")
+                primer3_config = {
+                    'SEQUENCE_TEMPLATE': processed_sequence,
+                    'PRIMER_TASK': 'generic',
+                    'PRIMER_PICK_LEFT_PRIMER': 1,
+                    'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_OPT_SIZE': 20,
+                    'PRIMER_MIN_SIZE': 18,
+                    'PRIMER_MAX_SIZE': 25,
+                    'PRIMER_OPT_TM': 60.0,
+                    'PRIMER_MIN_TM': 57.0,
+                    'PRIMER_MAX_TM': 63.0,
+                    'PRIMER_MIN_GC': 20.0,
+                    'PRIMER_MAX_GC': 80.0,
+                    'PRIMER_PRODUCT_SIZE_RANGE': [[200, 1000]]
+                }
+        
+        # Run primer3
+        result = primer3.bindings.design_primers(primer3_config, global_args={})
+        
+        # Check for errors
+        if 'PRIMER_ERROR' in result and result['PRIMER_ERROR']:
+            return jsonify({'error': f'Primer design failed: {result["PRIMER_ERROR"]}'})
+        
+        # Check if we got any primer pairs
+        if 'PRIMER_PAIR' not in result or not result['PRIMER_PAIR']:
+            return jsonify({'error': 'No suitable primer pairs found. Try a longer sequence or different parameters.'})
+        
+        # Extract primer pairs with detailed analysis
+        primer_pairs = []
+        num_pairs = result.get('PRIMER_PAIR_NUM_RETURNED', 0)
+        
+        for i in range(min(3, num_pairs)):
+            # Get primer sequences from individual keys
+            forward_primer = result.get(f'PRIMER_LEFT_{i}_SEQUENCE', '')
+            reverse_primer = result.get(f'PRIMER_RIGHT_{i}_SEQUENCE', '')
+            product_size = result.get(f'PRIMER_PAIR_{i}_PRODUCT_SIZE', 0)
+            
+            if not forward_primer or not reverse_primer:
+                continue
+            
+            # Calculate detailed analysis
+            score, explanations = calculate_primer_score(forward_primer, reverse_primer, product_size, experiment_type)
+            
+            # Get detailed primer properties
+            forward_tm = round(primer3.calc_tm(forward_primer), 1)
+            reverse_tm = round(primer3.calc_tm(reverse_primer), 1)
+            forward_gc = round((forward_primer.count('G') + forward_primer.count('C')) / len(forward_primer) * 100, 1)
+            reverse_gc = round((reverse_primer.count('G') + reverse_primer.count('C')) / len(reverse_primer) * 100, 1)
+            
+            # Hairpin analysis
+            forward_hairpin = primer3.calc_hairpin(forward_primer)
+            reverse_hairpin = primer3.calc_hairpin(reverse_primer)
+            
+            # Self-dimer analysis
+            forward_dimer = primer3.calc_homodimer(forward_primer)
+            reverse_dimer = primer3.calc_homodimer(reverse_primer)
+            
+            # Hetero-dimer analysis
+            hetero_dimer = primer3.calc_heterodimer(forward_primer, reverse_primer)
+            
+            # GC clamp analysis
+            forward_gc_clamp = forward_primer[-1] in 'GC'
+            reverse_gc_clamp = reverse_primer[-1] in 'GC'
+            
+            # Analyze secondary structures
+            forward_secondary = analyze_secondary_structures(forward_primer)
+            reverse_secondary = analyze_secondary_structures(reverse_primer)
+            
+            # Generate dimer visualizations
+            forward_self_dimer = visualize_dimer(forward_primer, forward_primer, "self")
+            reverse_self_dimer = visualize_dimer(reverse_primer, reverse_primer, "self")
+            hetero_dimer_viz = visualize_dimer(forward_primer, reverse_primer, "hetero")
+            
+            primer_pairs.append({
+                'forward': forward_primer,
+                'reverse': reverse_primer,
+                'product_size': product_size,
+                'score': score,
+                'score_label': get_score_label(score),
+                'explanations': explanations,
+                'forward_tm': forward_tm,
+                'reverse_tm': reverse_tm,
+                'forward_gc': forward_gc,
+                'reverse_gc': reverse_gc,
+                'forward_length': len(forward_primer),
+                'reverse_length': len(reverse_primer),
+                'forward_gc_clamp': forward_gc_clamp,
+                'reverse_gc_clamp': reverse_gc_clamp,
+                'forward_hairpin_dg': round(forward_hairpin.dg, 2),
+                'reverse_hairpin_dg': round(reverse_hairpin.dg, 2),
+                'forward_dimer_dg': round(forward_dimer.dg, 2),
+                'reverse_dimer_dg': round(reverse_dimer.dg, 2),
+                'hetero_dimer_dg': round(hetero_dimer.dg, 2),
+                'hairpin_risky': forward_hairpin.dg < -2 or reverse_hairpin.dg < -2,
+                'dimer_risky': forward_dimer.dg < -6 or reverse_dimer.dg < -6 or hetero_dimer.dg < -7,
+                'summary': get_primer_summary(score, explanations),
+                'forward_secondary': forward_secondary,
+                'reverse_secondary': reverse_secondary,
+                'forward_self_dimer': forward_self_dimer,
+                'reverse_self_dimer': reverse_self_dimer,
+                'hetero_dimer_viz': hetero_dimer_viz
+            })
+        
+        # Sort by score (highest first) and take top 3
+        primer_pairs.sort(key=lambda x: x['score'], reverse=True)
+        top_primers = primer_pairs[:3]
+        
+        # Add primer positions for sequence view and apply full gene bonus
+        for i, primer in enumerate(top_primers):
+            try:
+                # Get primer positions from primer3 output - handle both list and int formats
+                forward_pos_data = result.get(f'PRIMER_LEFT_{i}', 0)
+                reverse_pos_data = result.get(f'PRIMER_RIGHT_{i}', 0)
+                
+                # Extract position values safely
+                if isinstance(forward_pos_data, list) and len(forward_pos_data) > 0:
+                    forward_pos = forward_pos_data[0]
+                else:
+                    forward_pos = forward_pos_data
+                    
+                if isinstance(reverse_pos_data, list) and len(reverse_pos_data) > 0:
+                    reverse_pos = reverse_pos_data[0]
+                else:
+                    reverse_pos = reverse_pos_data
+                
+                # Ensure positions are integers
+                forward_pos = int(forward_pos) if forward_pos is not None else 0
+                reverse_pos = int(reverse_pos) if reverse_pos is not None else 0
+                
+                # Forward primer positions (direct sequence match)
+                if target_region == 'cds' and orf_info:
+                    # For CDS, primers are designed on full sequence with constraints
+                    # No need for ORF offset adjustment
+                    primer['forward_start'] = forward_pos
+                    primer['forward_end'] = forward_pos + len(primer['forward'])
+                else:
+                    primer['forward_start'] = forward_pos
+                    primer['forward_end'] = forward_pos + len(primer['forward'])
+                
+                # Reverse primer positions (binds to reverse complement)
+                # The reverse primer binds to the reverse complement, so we need to calculate
+                # where the reverse complement of the reverse primer appears in the sequence
+                reverse_complement = get_complement(primer['reverse'])[::-1]  # Reverse complement
+                
+                # Find where the reverse complement appears in the sequence
+                # This is where the reverse primer actually binds
+                if target_region == 'cds' and orf_info:
+                    # For CDS, search in the full sequence
+                    reverse_binding_pos = sequence.find(reverse_complement)
+                    if reverse_binding_pos != -1:
+                        primer['reverse_start'] = reverse_binding_pos
+                        primer['reverse_end'] = reverse_binding_pos + len(primer['reverse'])
+                    else:
+                        # Fallback: use the original reverse_pos
+                        primer['reverse_start'] = reverse_pos
+                        primer['reverse_end'] = reverse_pos + len(primer['reverse'])
+                else:
+                    reverse_binding_pos = processed_sequence.find(reverse_complement)
+                    if reverse_binding_pos != -1:
+                        primer['reverse_start'] = reverse_binding_pos
+                        primer['reverse_end'] = reverse_binding_pos + len(primer['reverse'])
+                    else:
+                        # Fallback: use the original reverse_pos but adjust for reverse complement
+                        primer['reverse_start'] = reverse_pos
+                        primer['reverse_end'] = reverse_pos + len(primer['reverse'])
+                
+                # Apply full gene coverage bonus for "Full Gene" target region
+                if target_region == 'full_gene':
+                    # Calculate coverage percentage
+                    total_sequence_length = len(processed_sequence)
+                    coverage_length = primer['reverse_end'] - primer['forward_start']
+                    coverage_percentage = (coverage_length / total_sequence_length) * 100
+                    
+                    # Enhanced scoring for Standard PCR - prioritize 85-95% coverage
+                    if experiment_type == 'standard_pcr':
+                        if coverage_percentage >= 95:
+                            primer['score'] = min(100, primer['score'] + 20)  # Maximum bonus
+                            primer['full_gene_coverage'] = f"Excellent coverage ({coverage_percentage:.1f}% of gene)"
+                        elif coverage_percentage >= 90:
+                            primer['score'] = min(100, primer['score'] + 15)
+                            primer['full_gene_coverage'] = f"Very good coverage ({coverage_percentage:.1f}% of gene)"
+                        elif coverage_percentage >= 85:
+                            primer['score'] = min(100, primer['score'] + 10)
+                            primer['full_gene_coverage'] = f"Good coverage ({coverage_percentage:.1f}% of gene)"
+                        elif coverage_percentage >= 75:
+                            primer['score'] = min(100, primer['score'] + 5)
+                            primer['full_gene_coverage'] = f"Moderate coverage ({coverage_percentage:.1f}% of gene)"
+                        else:
+                            primer['full_gene_coverage'] = f"Limited coverage ({coverage_percentage:.1f}% of gene) - Consider alternatives"
+                    else:
+                        # Original scoring for qPCR
+                        if coverage_percentage >= 80:
+                            primer['score'] = min(100, primer['score'] + 15)  # Maximum bonus
+                            primer['full_gene_coverage'] = f"Excellent coverage ({coverage_percentage:.1f}% of gene)"
+                        elif coverage_percentage >= 60:
+                            primer['score'] = min(100, primer['score'] + 10)
+                            primer['full_gene_coverage'] = f"Good coverage ({coverage_percentage:.1f}% of gene)"
+                        elif coverage_percentage >= 40:
+                            primer['score'] = min(100, primer['score'] + 5)
+                            primer['full_gene_coverage'] = f"Moderate coverage ({coverage_percentage:.1f}% of gene)"
+                        else:
+                            primer['full_gene_coverage'] = f"Limited coverage ({coverage_percentage:.1f}% of gene)"
+                    
+                    # Update score label after bonus
+                    primer['score_label'] = get_score_label(primer['score'])
+                    
+                    print(f"DEBUG: Full gene coverage for primer {i+1}: {coverage_percentage:.1f}%")
+                
+                # Calculate CDS coverage for CDS target region
+                if target_region == 'cds' and orf_info:
+                    cds_coverage = calculate_cds_coverage(
+                        primer['forward_start'], 
+                        primer['reverse_end'], 
+                        orf_info
+                    )
+                    primer['cds_coverage'] = f"{cds_coverage}% CDS coverage"
+                    print(f"DEBUG: CDS coverage for primer {i+1}: {cds_coverage}%")
+                    
+                    # Add bonus points for better CDS coverage (90-100% target)
+                    if cds_coverage >= 100:
+                        primer['score'] = min(100, primer['score'] + 15)  # Maximum bonus
+                        primer['cds_coverage_label'] = f"Perfect CDS coverage ({cds_coverage}%)"
+                    elif cds_coverage >= 95:
+                        primer['score'] = min(100, primer['score'] + 12)
+                        primer['cds_coverage_label'] = f"Excellent CDS coverage ({cds_coverage}%)"
+                    elif cds_coverage >= 90:
+                        primer['score'] = min(100, primer['score'] + 10)
+                        primer['cds_coverage_label'] = f"Good CDS coverage ({cds_coverage}%)"
+                    elif cds_coverage >= 80:
+                        primer['score'] = min(100, primer['score'] + 5)
+                        primer['cds_coverage_label'] = f"Moderate CDS coverage ({cds_coverage}%)"
+                    else:
+                        primer['cds_coverage_label'] = f"Limited CDS coverage ({cds_coverage}%) - Consider alternatives"
+                    
+                    # Update score label after bonus
+                    primer['score_label'] = get_score_label(primer['score'])
+                
+                # Calculate 3' UTR coverage for 3' UTR target region
+                if target_region == '3utr' and orf_info:
+                    # For 3' UTR, orf_info actually contains UTR information
+                    # Adjust positions for 3' UTR (primer positions are relative to UTR sequence)
+                    utr_start = orf_info['start']
+                    utr_end = orf_info['end']
+                    
+                    # For 3' UTR, we need to handle reverse primer binding differently
+                    # The reverse primer binds to the reverse complement of the UTR sequence
+                    utr_sequence = sequence[utr_start:utr_end]
+                    reverse_complement = get_complement(primer['reverse'])[::-1]
+                    
+                    # Find where the reverse complement appears in the UTR sequence
+                    reverse_binding_pos_in_utr = utr_sequence.find(reverse_complement)
+                    
+                    if reverse_binding_pos_in_utr != -1:
+                        # Convert UTR-relative positions to full sequence positions
+                        full_forward_start = utr_start + primer['forward_start']
+                        full_forward_end = utr_start + primer['forward_end']
+                        full_reverse_start = utr_start + reverse_binding_pos_in_utr
+                        full_reverse_end = utr_start + reverse_binding_pos_in_utr + len(primer['reverse'])
+                        
+                        # Update primer positions to full sequence coordinates
+                        primer['forward_start'] = full_forward_start
+                        primer['forward_end'] = full_forward_end
+                        primer['reverse_start'] = full_reverse_start
+                        primer['reverse_end'] = full_reverse_end
+                    else:
+                        # Fallback: use the original positions but adjust for UTR offset
+                        full_forward_start = utr_start + primer['forward_start']
+                        full_forward_end = utr_start + primer['forward_end']
+                        full_reverse_start = utr_start + primer['reverse_start']
+                        full_reverse_end = utr_start + primer['reverse_end']
+                        
+                        # Update primer positions to full sequence coordinates
+                        primer['forward_start'] = full_forward_start
+                        primer['forward_end'] = full_forward_end
+                        primer['reverse_start'] = full_reverse_start
+                        primer['reverse_end'] = full_reverse_end
+                    
+                    # Calculate UTR coverage
+                    utr_length = orf_info['length']
+                    coverage_length = primer['reverse_end'] - primer['forward_start']
+                    utr_coverage = (coverage_length / utr_length) * 100
+                    
+                    primer['utr_coverage'] = f"{utr_coverage:.1f}% 3' UTR coverage"
+                    print(f"DEBUG: 3' UTR coverage for primer {i+1}: {utr_coverage:.1f}%")
+                    print(f"DEBUG: 3' UTR reverse binding - UTR sequence: {utr_sequence[:50]}...")
+                    print(f"DEBUG: 3' UTR reverse binding - Reverse complement: {reverse_complement}")
+                    print(f"DEBUG: 3' UTR reverse binding - Position in UTR: {reverse_binding_pos_in_utr}")
+                    
+                    # Add bonus points for better UTR coverage
+                    if utr_coverage >= 90:
+                        primer['score'] = min(100, primer['score'] + 10)  # Maximum bonus
+                        primer['utr_coverage_label'] = f"Excellent 3' UTR coverage ({utr_coverage:.1f}%)"
+                    elif utr_coverage >= 80:
+                        primer['score'] = min(100, primer['score'] + 7)
+                        primer['utr_coverage_label'] = f"Good 3' UTR coverage ({utr_coverage:.1f}%)"
+                    elif utr_coverage >= 70:
+                        primer['score'] = min(100, primer['score'] + 5)
+                        primer['utr_coverage_label'] = f"Moderate 3' UTR coverage ({utr_coverage:.1f}%)"
+                    else:
+                        primer['utr_coverage_label'] = f"Limited 3' UTR coverage ({utr_coverage:.1f}%)"
+                    
+                    # Update score label after bonus
+                    primer['score_label'] = get_score_label(primer['score'])
+                
+                print(f"DEBUG: Primer {i+1} positions:")
+                print(f"  Forward: {primer['forward_start']}-{primer['forward_end']} ({primer['forward']})")
+                print(f"  Reverse: {primer['reverse_start']}-{primer['reverse_end']} ({primer['reverse']})")
+                print(f"  Reverse complement: {reverse_complement}")
+                print(f"  Reverse binding position: {reverse_binding_pos}")
+                
+            except Exception as e:
+                print(f"ERROR calculating primer positions: {e}")
+                # Fallback to simple positioning if there's an error
+                primer['forward_start'] = 100 + (i * 50)
+                primer['forward_end'] = 100 + (i * 50) + len(primer['forward'])
+                primer['reverse_start'] = 500 + (i * 50)
+                primer['reverse_end'] = 500 + (i * 50) + len(primer['reverse'])
+        
+        # Re-sort by updated scores for full gene coverage
+        if target_region == 'full_gene':
+            top_primers.sort(key=lambda x: x['score'], reverse=True)
+        
+        # Redirect to results page with data
+        import json
+        import urllib.parse
+        primers_json = urllib.parse.quote(json.dumps(top_primers))
+        sequence_json = urllib.parse.quote(processed_sequence)
+        original_sequence_json = urllib.parse.quote(sequence)
+        
+        # Add ORF information if available
+        orf_json = urllib.parse.quote(json.dumps(orf_info)) if orf_info else ""
+        
+        return jsonify({
+            'redirect': f'/results?primers={primers_json}&sequence_length={len(processed_sequence)}&experiment_type={experiment_type}&sequence={sequence_json}&original_sequence={original_sequence_json}&orf_info={orf_json}&mode={mode}'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error designing primers: {str(e)}'})
 
 def get_primer_summary(score, explanations):
     """Generate a one-line summary of primer quality"""
@@ -859,5 +1408,8 @@ def learn():
     """Display primer design theory and educational content"""
     return render_template('learn.html')
 
+import os
+
 if __name__ == '__main__':
-    app.run(debug=True) 
+    port = int(os.environ.get("PORT", 5000))  # 5000 is fallback for local
+    app.run(host='0.0.0.0', port=port, debug=True)

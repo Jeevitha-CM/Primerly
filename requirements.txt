@@ -2,4 +2,4 @@ pip>=25.0.1
 primer3-py==2.2.0
 biopython==1.81
 Flask==2.3.2
-gunicorn 
+gunicorn==21.2.0 

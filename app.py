@@ -12,16 +12,16 @@ Author: Jeevitha C M (Founder of Biovagon)
 Website: https://www.biovagon.org/
 """
 
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_file, redirect, session
 from Bio import Entrez
 from Bio.Seq import Seq
 import primer3
 import csv
 import io
 import re
+import uuid
 from datetime import datetime
 from collections import defaultdict
-import uuid
 
 # Application metadata
 __version__ = "1.0.0"
@@ -34,11 +34,11 @@ __website__ = "https://www.biovagon.org/"
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'
 
+# In-memory storage for results (use database for production)
+result_store = {}
+
 # Set email for NCBI Entrez (required)
 Entrez.email = "jeevithacm21@gmail.com"
-
-# TEMPORARY in-memory storage (use DB for production)
-result_store = {}
 
 def fetch_sequence_from_ncbi(accession):
     """Fetch DNA sequence from NCBI using accession number"""
@@ -369,98 +369,38 @@ def get_highlighted_sequence(sequence, primers, primer_index=0, orf_info=None, u
     
     return result
 
-@app.route('/results')
-def results():
-    """Display primer design results"""
+@app.route('/result/<result_id>')
+def show_result(result_id):
+    """Display primer design results using stored data"""
     try:
-        # Get results from session or query parameters
-        primers = request.args.get('primers', '[]')
-        try:
-            sequence_length = int(request.args.get('sequence_length', 0))
-        except (ValueError, TypeError):
-            sequence_length = 0
-        experiment_type = request.args.get('experiment_type', 'standard_pcr')
-        sequence = request.args.get('sequence', '')
-        orf_info = request.args.get('orf_info', '')
-        mode = request.args.get('mode', 'beginner')
+        # Get results from storage
+        data = result_store.get(result_id)
+        if not data:
+            return "Result not found or expired", 404
         
-        print(f"DEBUG: Results route called")
-        print(f"DEBUG: primers length: {len(primers)}")
-        print(f"DEBUG: sequence length: {len(sequence)}")
-        print(f"DEBUG: orf_info length: {len(orf_info)}")
-        
-        import json
-        primers_data = json.loads(primers)
-        print(f"DEBUG: Parsed {len(primers_data)} primers")
-        
-        # Parse ORF information if available
-        orf_data = None
-        utr_data = None
-        if orf_info:
-            try:
-                orf_data = json.loads(orf_info)
-                print(f"DEBUG: Parsed ORF data: {orf_data}")
-                
-                # Check if this is actually UTR data (has 'orf_end' key)
-                if 'orf_end' in orf_data:
-                    utr_data = orf_data
-                    orf_data = None  # Clear ORF data since this is UTR
-                    print(f"DEBUG: Detected UTR data: {utr_data}")
-            except Exception as e:
-                print(f"DEBUG: Error parsing ORF/UTR info: {e}")
-                orf_data = None
-                utr_data = None
-        
-        # Debug: Print sequence and primer information
-        print(f"DEBUG: Sequence length: {len(sequence)}")
-        print(f"DEBUG: Sequence preview: {sequence[:100]}...")
-        if orf_data:
-            print(f"DEBUG: ORF info: {orf_data}")
-        for i, primer in enumerate(primers_data):
-            print(f"DEBUG: Primer {i+1} positions:")
-            print(f"  Forward: {primer['forward_start']}-{primer['forward_end']}")
-            print(f"  Reverse: {primer['reverse_start']}-{primer['reverse_end']}")
-        
-        # Create individual highlighted sequences for each primer set
-        individual_highlighted_sequences = []
-        for i, primer in enumerate(primers_data):
-            try:
-                # Create a list with only this primer highlighted, passing the correct index
-                individual_sequence = get_highlighted_sequence(sequence, [primer], i, orf_data, utr_data)
-                individual_highlighted_sequences.append(individual_sequence)
-                print(f"DEBUG: Created highlighted sequence for primer {i+1}")
-            except Exception as e:
-                print(f"DEBUG: Error creating highlighted sequence for primer {i+1}: {e}")
-                # Create a fallback sequence
-                fallback_sequence = [{'char': char, 'color_class': ''} for char in sequence]
-                individual_highlighted_sequences.append(fallback_sequence)
-        
-        # Create the main highlighted sequence (all primers)
-        try:
-            highlighted_sequence = get_highlighted_sequence(sequence, primers_data, 0, orf_data, utr_data)
-            print(f"DEBUG: Created main highlighted sequence")
-        except Exception as e:
-            print(f"DEBUG: Error creating main highlighted sequence: {e}")
-            # Create a fallback sequence
-            highlighted_sequence = [{'char': char, 'color_class': ''} for char in sequence]
-        
-        print(f"DEBUG: About to render template")
+        print(f"DEBUG: Showing result for ID: {result_id}")
+        print(f"DEBUG: Found {len(data['primers'])} primers")
         
         return render_template('results.html', 
-                             primers=primers_data, 
-                             sequence_length=sequence_length,
-                             experiment_type=experiment_type,
-                             sequence=sequence,
-                             highlighted_sequence=highlighted_sequence,
-                             individual_highlighted_sequences=individual_highlighted_sequences,
-                             orf_info=orf_data,
-                             utr_info=utr_data,
-                             mode=mode)
+                             primers=data['primers'], 
+                             sequence_length=data['sequence_length'],
+                             experiment_type=data['experiment_type'],
+                             sequence=data['sequence'],
+                             highlighted_sequence=data['highlighted_sequence'],
+                             individual_highlighted_sequences=data['individual_highlighted_sequences'],
+                             orf_info=data['orf_info'],
+                             utr_info=data['utr_info'],
+                             mode=data['mode'])
     except Exception as e:
-        print(f"Error in results route: {e}")
+        print(f"Error in result route: {e}")
         import traceback
         traceback.print_exc()
-        return f"Error processing results: {str(e)}", 500
+        return f"Error processing result: {str(e)}", 500
+
+@app.route('/results')
+def results():
+    """Legacy results route - redirects to new system"""
+    return "This route is deprecated. Please use the new result system.", 400
 
 def find_largest_orf(sequence):
     """
@@ -672,11 +612,6 @@ def design_primers():
     custom_start = data.get('custom_start')
     custom_end = data.get('custom_end')
     
-    # Always define these, even if not used
-    orf_info = None
-    utr_info = None
-    individual_highlighted_sequences = []
-
     # For qPCR, always use 3' UTR as target region
     if experiment_type == 'qpcr':
         target_region = '3utr'
@@ -1252,20 +1187,48 @@ def design_primers():
         if target_region == 'full_gene':
             top_primers.sort(key=lambda x: x['score'], reverse=True)
         
-        # Store everything
+        # Create individual highlighted sequences for each primer set
+        individual_highlighted_sequences = []
+        for i, primer in enumerate(top_primers):
+            try:
+                individual_sequence = get_highlighted_sequence(processed_sequence, [primer], i, orf_info, None)
+                individual_highlighted_sequences.append(individual_sequence)
+            except Exception as e:
+                print(f"DEBUG: Error creating highlighted sequence for primer {i+1}: {e}")
+                fallback_sequence = [{'char': char, 'color_class': ''} for char in processed_sequence]
+                individual_highlighted_sequences.append(fallback_sequence)
+        
+        # Create the main highlighted sequence (all primers)
+        try:
+            highlighted_sequence = get_highlighted_sequence(processed_sequence, top_primers, 0, orf_info, None)
+        except Exception as e:
+            print(f"DEBUG: Error creating main highlighted sequence: {e}")
+            highlighted_sequence = [{'char': char, 'color_class': ''} for char in processed_sequence]
+        
+        # Generate unique result ID
         result_id = str(uuid.uuid4())
+        
+        # Store results in memory
         result_store[result_id] = {
             'primers': top_primers,
             'sequence': processed_sequence,
-            'sequence_length': len(processed_sequence) if processed_sequence else 0,
+            'original_sequence': sequence,
+            'sequence_length': len(processed_sequence),
             'experiment_type': experiment_type,
             'mode': mode,
             'orf_info': orf_info,
-            'utr_info': utr_info,
-            'individual_highlighted_sequences': individual_highlighted_sequences
+            'utr_info': None,
+            'highlighted_sequence': highlighted_sequence,
+            'individual_highlighted_sequences': individual_highlighted_sequences,
+            'target_region': target_region,
+            'custom_start': custom_start,
+            'custom_end': custom_end
         }
-        # Redirect to result page with short ID
-        return jsonify({'redirect': f'/result/{result_id}'})
+        
+        # Return redirect URL with short result ID
+        return jsonify({
+            'redirect': f'/result/{result_id}'
+        })
         
     except Exception as e:
         return jsonify({'error': f'Error designing primers: {str(e)}'})
@@ -1417,22 +1380,6 @@ def version():
 def learn():
     """Display primer design theory and educational content"""
     return render_template('learn.html')
-
-@app.route('/result/<result_id>')
-def show_results(result_id):
-    data = result_store.get(result_id)
-    if not data:
-        return "Result not found", 404
-    return render_template('results.html',
-        primers=data['primers'],
-        sequence=data['sequence'],
-        sequence_length=data['sequence_length'],
-        experiment_type=data['experiment_type'],
-        mode=data['mode'],
-        orf_info=data.get('orf_info'),
-        utr_info=data.get('utr_info'),
-        individual_highlighted_sequences=data.get('individual_highlighted_sequences')
-    )
 
 import os
 

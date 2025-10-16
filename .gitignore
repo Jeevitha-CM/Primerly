@@ -152,6 +152,25 @@ temp/
 uploads/
 downloads/
 
+# Sensitive data - NEVER commit these
+site_stats.json
+early_access.csv
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
+config.json
+.env.production
+.env.local
+
+# User data and analytics
+user_data/
+analytics/
+stats/
+*.csv
+*.json
+
 # Desktop app builds
 build_app/
 dist/

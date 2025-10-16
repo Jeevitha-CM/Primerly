@@ -4,12 +4,69 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Primerly – PCR Primer Design Tool</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background: #f8fafc; }
+        :root {
+            --primary-color: #2c5aa0;
+            --primary-dark: #1e3f73;
+            --primary-light: #4a7bc8;
+            --accent-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+        }
+        
+        body { 
+            background: #f8fafc; 
+            font-family: 'IBM Plex Sans', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; 
+            background-image: url('/static/doodle.png');
+            background-repeat: repeat;
+            background-size: 320px 320px;
+            background-attachment: fixed;
+        }
+        
+        .navbar-dark {
+            background-color: var(--primary-color) !important;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+            border-color: var(--primary-dark);
+        }
+        
+        .btn-outline-primary {
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .btn-outline-primary:hover {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .text-primary {
+            color: var(--primary-color) !important;
+        }
+        
+        .border-primary {
+            border-color: var(--primary-color) !important;
+        }
         .score-label { font-size: 1.1em; font-weight: bold; }
         .explanation-list { font-size: 0.95em; }
         .tooltip-inner { max-width: 350px; }
+        /* Bottom panels */
+        .bottom-panels {
+            margin-top: 40px;
+        }
+        .logo-small {
+            height: 28px;
+            width: auto;
+        }
     </style>
     <script>
         // Disable right-click context menu
@@ -69,6 +126,25 @@
     </script>
 </head>
 <body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-dna me-2"></i>Primerly
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <div class="navbar-nav ms-auto">
+                    <a class="nav-link active" href="/">Home</a>
+                    <a class="nav-link" href="/about">About Primerly</a>
+                    <a class="nav-link" href="/learn">Learn</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
 <div class="container py-4">
     <div class="row justify-content-center">
         <div class="col-lg-8 col-md-10">
@@ -135,12 +211,44 @@
                 </div>
             </div>
             <div id="error-message" class="alert alert-danger d-none"></div>
+            
+            <!-- Bottom panels for Early Access and Upcoming Features -->
+            <div class="bottom-panels">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <h6 class="mb-2">Early Access</h6>
+                                <p class="small mb-2"><strong>First 1,000 users</strong> get discount and advanced features.</p>
+                                <button class="btn btn-sm btn-success w-100" data-bs-toggle="modal" data-bs-target="#earlyAccessModal">Join Early Access</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <h6 class="mb-2">Upcoming Features</h6>
+                                <p class="small mb-2">Interested in ordering primers when we launch?</p>
+                                <div class="d-flex align-items-center mb-2">
+                                    <button id="interest-btn" class="btn btn-sm btn-outline-primary me-2">I'd order</button>
+                                    <span class="small text-muted">Interest: <span id="interest-count">0</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <footer class="text-center text-muted mt-4">
-                <p>&copy; 2025 Primerly - A Biovagon Initiative | Version 1.0.0 | MIT License</p>
+                <p>
+                    <img src="/static/logo.png" alt="Biovagon" class="logo-small me-2">
+                    &copy; 2025 Primerly - A Biovagon Initiative | Version 1.0.0 | MIT License
+                </p>
                 <p class="small">
                     <a href="/learn" class="text-decoration-none">Learn More</a> | 
                     <a href="/version" class="text-decoration-none">Version Info</a> |
-                    <a href="https://www.biovagon.org/" target="_blank" class="text-decoration-none">Biovagon</a>
+                    <a href="https://www.biovagon.org/" target="_blank" class="text-decoration-none">Biovagon</a> |
+                    <span class="text-muted">Primer Designs: <span id="design-count">—</span></span>
                 </p>
             </footer>
         </div>
@@ -215,7 +323,7 @@ fetchSeqBtn.addEventListener('click', async () => {
         } else {
             sequenceInput.value = data.sequence;
             sequenceInput.readOnly = true;
-            showError('');
+            clearError();
         }
     } catch (e) {
         showError('Failed to fetch sequence.');
@@ -281,6 +389,98 @@ form.addEventListener('submit', async (e) => {
         showError('Failed to design primers.');
     }
 });
+
+// Fetch stats for footer and interest
+(async function initStats() {
+    try {
+        const res = await fetch('/stats');
+        const data = await res.json();
+        if (data && !data.error) {
+            const dc = document.getElementById('design-count');
+            const ic = document.getElementById('interest-count');
+            if (dc) dc.textContent = data.primer_designs ?? '0';
+            if (ic) ic.textContent = data.order_interest ?? '0';
+        }
+    } catch {}
+})();
+
+// Interest button
+const interestBtn = document.getElementById('interest-btn');
+if (interestBtn) {
+    interestBtn.addEventListener('click', async () => {
+        try {
+            const res = await fetch('/order-interest', { method: 'POST' });
+            const data = await res.json();
+            if (data && !data.error) {
+                const ic = document.getElementById('interest-count');
+                if (ic) ic.textContent = data.order_interest ?? '0';
+                interestBtn.disabled = true;
+                interestBtn.textContent = 'Thanks!';
+            }
+        } catch {}
+    });
+}
+
+</script>
+
+<!-- Early Access Modal -->
+<div class="modal fade" id="earlyAccessModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Join Early Access</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Name</label>
+          <input type="text" class="form-control" id="ea-name" placeholder="Your name">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-control" id="ea-email" placeholder="you@example.com">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Phone (optional)</label>
+          <input type="text" class="form-control" id="ea-phone" placeholder="Optional">
+        </div>
+        <div class="alert alert-info small">First 1,000 signups receive early access and discounts.</div>
+        <div id="ea-error" class="text-danger small d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="ea-submit">Join</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const eaError = document.getElementById('ea-error');
+    document.getElementById('ea-submit')?.addEventListener('click', async () => {
+      eaError?.classList.add('d-none');
+      const name = document.getElementById('ea-name').value.trim();
+      const email = document.getElementById('ea-email').value.trim();
+      const phone = document.getElementById('ea-phone').value.trim();
+      try {
+        const res = await fetch('/early-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, phone })
+        });
+        const data = await res.json();
+        if (data.error) {
+          eaError.textContent = data.error;
+          eaError.classList.remove('d-none');
+          return;
+        }
+        const modal = bootstrap.Modal.getInstance(document.getElementById('earlyAccessModal'));
+        modal?.hide();
+      } catch (e) {
+        eaError.textContent = 'Failed to submit. Please try again.';
+        eaError.classList.remove('d-none');
+      }
+    });
+  </script>
+</div>
 </script>
 </body>
 </html> 

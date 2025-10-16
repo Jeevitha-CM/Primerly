@@ -22,6 +22,8 @@ import re
 import uuid
 from datetime import datetime
 from collections import defaultdict
+import os
+import json
 
 # Application metadata
 __version__ = "1.0.0"
@@ -36,6 +38,32 @@ app.secret_key = 'your-secret-key-here'
 
 # In-memory storage for results (use database for production)
 result_store = {}
+
+# Simple persistent site stats (page views, unique visitors, order interest)
+STATS_FILE = 'site_stats.json'
+EARLY_ACCESS_FILE = 'early_access.csv'
+
+def load_stats():
+    try:
+        if os.path.exists(STATS_FILE):
+            with open(STATS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return {
+                    'primer_designs': int(data.get('primer_designs', 0)),
+                    'order_interest': int(data.get('order_interest', 0))
+                }
+    except Exception as e:
+        print(f"DEBUG: Failed to load stats: {e}")
+    return {'primer_designs': 0, 'order_interest': 0}
+
+def save_stats(stats):
+    try:
+        with open(STATS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(stats, f)
+    except Exception as e:
+        print(f"DEBUG: Failed to save stats: {e}")
+
+site_stats = load_stats()
 
 # Set email for NCBI Entrez (required)
 Entrez.email = "jeevithacm21@gmail.com"
@@ -283,11 +311,18 @@ def get_highlighted_sequence(sequence, primers, primer_index=0, orf_info=None, u
     seq_len = len(sequence)
     highlight = [''] * seq_len
     
-    # Define colors for each primer pair
+    # Define colors for up to 10 primer pairs (unique per pair)
     primer_colors = [
-        {'forward': 'bg-primary', 'reverse': 'bg-danger'},      # Blue/Red for primer 1
-        {'forward': 'bg-success', 'reverse': 'bg-warning'},     # Green/Orange for primer 2  
-        {'forward': 'bg-info', 'reverse': 'bg-secondary'}       # Cyan/Gray for primer 3
+        {'forward': 'bg-primary',  'reverse': 'bg-danger'},     # Pair 1: Blue / Red
+        {'forward': 'bg-success',  'reverse': 'bg-warning'},    # Pair 2: Green / Orange
+        {'forward': 'bg-info',     'reverse': 'bg-secondary'},  # Pair 3: Cyan / Gray
+        {'forward': 'bg-pair4f',   'reverse': 'bg-pair4r'},     # Pair 4: Purple / Teal
+        {'forward': 'bg-pair5f',   'reverse': 'bg-pair5r'},     # Pair 5: Pink / Brown
+        {'forward': 'bg-pair6f',   'reverse': 'bg-pair6r'},     # Pair 6: Indigo / Amber
+        {'forward': 'bg-pair7f',   'reverse': 'bg-pair7r'},     # Pair 7: Cyan-dark / Lime
+        {'forward': 'bg-pair8f',   'reverse': 'bg-pair8r'},     # Pair 8: Navy / Coral
+        {'forward': 'bg-pair9f',   'reverse': 'bg-pair9r'},     # Pair 9: Slate / Gold
+        {'forward': 'bg-pair10f',  'reverse': 'bg-pair10r'}     # Pair 10: Maroon / Sky
     ]
     
     # Highlight ORF region if provided
@@ -685,6 +720,7 @@ def design_primers():
                     'PRIMER_TASK': 'generic',
                     'PRIMER_PICK_LEFT_PRIMER': 1,
                     'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_NUM_RETURNED': 10,
                     'PRIMER_OPT_SIZE': 20,
                     'PRIMER_MIN_SIZE': 18,
                     'PRIMER_MAX_SIZE': 25,
@@ -708,6 +744,7 @@ def design_primers():
                     'PRIMER_TASK': 'generic',
                     'PRIMER_PICK_LEFT_PRIMER': 1,
                     'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_NUM_RETURNED': 10,
                     'PRIMER_OPT_SIZE': 20,
                     'PRIMER_MIN_SIZE': 18,
                     'PRIMER_MAX_SIZE': 25,
@@ -747,6 +784,7 @@ def design_primers():
                     'PRIMER_TASK': 'generic',
                     'PRIMER_PICK_LEFT_PRIMER': 1,
                     'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_NUM_RETURNED': 10,
                     'PRIMER_OPT_SIZE': 20,
                     'PRIMER_MIN_SIZE': 18,
                     'PRIMER_MAX_SIZE': 25,
@@ -781,6 +819,7 @@ def design_primers():
                     'PRIMER_TASK': 'generic',
                     'PRIMER_PICK_LEFT_PRIMER': 1,
                     'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_NUM_RETURNED': 10,
                     'PRIMER_OPT_SIZE': 20,
                     'PRIMER_MIN_SIZE': 18,
                     'PRIMER_MAX_SIZE': 25,
@@ -816,6 +855,7 @@ def design_primers():
                     'PRIMER_TASK': 'generic',
                     'PRIMER_PICK_LEFT_PRIMER': 1,
                     'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_NUM_RETURNED': 10,
                     'PRIMER_OPT_SIZE': 20,
                     'PRIMER_MIN_SIZE': 18,
                     'PRIMER_MAX_SIZE': 25,
@@ -848,6 +888,7 @@ def design_primers():
                             'PRIMER_TASK': 'generic',
                             'PRIMER_PICK_LEFT_PRIMER': 1,
                             'PRIMER_PICK_RIGHT_PRIMER': 1,
+                            'PRIMER_NUM_RETURNED': 10,
                             'PRIMER_OPT_SIZE': 20,
                             'PRIMER_MIN_SIZE': 18,
                             'PRIMER_MAX_SIZE': 25,
@@ -870,6 +911,7 @@ def design_primers():
                     'PRIMER_TASK': 'generic',
                     'PRIMER_PICK_LEFT_PRIMER': 1,
                     'PRIMER_PICK_RIGHT_PRIMER': 1,
+                    'PRIMER_NUM_RETURNED': 10,
                     'PRIMER_OPT_SIZE': 20,
                     'PRIMER_MIN_SIZE': 18,
                     'PRIMER_MAX_SIZE': 25,
@@ -881,8 +923,16 @@ def design_primers():
                     'PRIMER_PRODUCT_SIZE_RANGE': [[200, 1000]]
                 }
         
-        # Run primer3
-        result = primer3.bindings.design_primers(primer3_config, global_args={})
+        # Run primer3 requesting up to 10 returned primer pairs
+        # Add PRIMER_NUM_RETURNED to the main config as well
+        primer3_config['PRIMER_NUM_RETURNED'] = 10
+        
+        result = primer3.bindings.design_primers(
+            primer3_config,
+            global_args={
+                'PRIMER_NUM_RETURNED': 10
+            }
+        )
         
         # Check for errors
         if 'PRIMER_ERROR' in result and result['PRIMER_ERROR']:
@@ -896,7 +946,7 @@ def design_primers():
         primer_pairs = []
         num_pairs = result.get('PRIMER_PAIR_NUM_RETURNED', 0)
         
-        for i in range(min(3, num_pairs)):
+        for i in range(min(10, num_pairs)):
             # Get primer sequences from individual keys
             forward_primer = result.get(f'PRIMER_LEFT_{i}_SEQUENCE', '')
             reverse_primer = result.get(f'PRIMER_RIGHT_{i}_SEQUENCE', '')
@@ -970,7 +1020,7 @@ def design_primers():
         
         # Sort by score (highest first) and take top 3
         primer_pairs.sort(key=lambda x: x['score'], reverse=True)
-        top_primers = primer_pairs[:3]
+        top_primers = primer_pairs[:10]
         
         # Add primer positions for sequence view and apply full gene bonus
         for i, primer in enumerate(top_primers):
@@ -1191,7 +1241,8 @@ def design_primers():
         individual_highlighted_sequences = []
         for i, primer in enumerate(top_primers):
             try:
-                individual_sequence = get_highlighted_sequence(processed_sequence, [primer], i, orf_info, None)
+                # Use modulo to safely map into available color palettes (10 available)
+                individual_sequence = get_highlighted_sequence(processed_sequence, [primer], i % 10, orf_info, None)
                 individual_highlighted_sequences.append(individual_sequence)
             except Exception as e:
                 print(f"DEBUG: Error creating highlighted sequence for primer {i+1}: {e}")
@@ -1204,6 +1255,14 @@ def design_primers():
         except Exception as e:
             print(f"DEBUG: Error creating main highlighted sequence: {e}")
             highlighted_sequence = [{'char': char, 'color_class': ''} for char in processed_sequence]
+        
+        # Count primer designs (engaged users)
+        try:
+            global site_stats
+            site_stats['primer_designs'] += 1
+            save_stats(site_stats)
+        except Exception as e:
+            print(f"DEBUG: Stats error on design: {e}")
         
         # Generate unique result ID
         result_id = str(uuid.uuid4())
@@ -1376,10 +1435,58 @@ def version():
         'description': 'PCR Primer Design Tool'
     })
 
+# Public stats endpoint
+@app.route('/stats')
+def stats():
+    try:
+        return jsonify(site_stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Order interest poll endpoints
+@app.route('/order-interest', methods=['GET', 'POST'])
+def order_interest():
+    try:
+        global site_stats
+        if request.method == 'POST':
+            site_stats['order_interest'] += 1
+            save_stats(site_stats)
+        return jsonify({'order_interest': site_stats['order_interest']})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Early access signup
+@app.route('/early-access', methods=['POST'])
+def early_access():
+    try:
+        data = request.get_json() or {}
+        name = (data.get('name') or '').strip()
+        email = (data.get('email') or '').strip()
+        phone = (data.get('phone') or '').strip()
+        if not name or not email:
+            return jsonify({'error': 'Name and email are required'}), 400
+        # Simple email validation
+        if not re.match(r'^.+@.+\..+$', email):
+            return jsonify({'error': 'Invalid email address'}), 400
+        header_needed = not os.path.exists(EARLY_ACCESS_FILE)
+        with open(EARLY_ACCESS_FILE, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if header_needed:
+                writer.writerow(['timestamp', 'name', 'email', 'phone'])
+            writer.writerow([datetime.now().isoformat(), name, email, phone])
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/learn')
 def learn():
     """Display primer design theory and educational content"""
     return render_template('learn.html')
+
+@app.route('/about')
+def about():
+    """Display about page with core functionality and scoring details"""
+    return render_template('about.html')
 
 import os
 

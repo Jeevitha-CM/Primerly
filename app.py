@@ -1457,6 +1457,7 @@ def order_interest():
 
 # Early access signup
 @app.route('/early-access', methods=['POST'])
+@app.route('/early-access-signup', methods=['POST'])
 def early_access():
     try:
         data = request.get_json() or {}
@@ -1474,7 +1475,7 @@ def early_access():
             if header_needed:
                 writer.writerow(['timestamp', 'name', 'email', 'phone'])
             writer.writerow([datetime.now().isoformat(), name, email, phone])
-        return jsonify({'ok': True})
+        return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

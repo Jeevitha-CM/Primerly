@@ -902,6 +902,33 @@
                     </div>
                 </div>
                 
+                <!-- Bottom panels for Early Access and Upcoming Features -->
+                <div class="container py-4">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="card shadow-sm">
+                                <div class="card-body">
+                                    <h6 class="mb-2">Early Access</h6>
+                                    <p class="small mb-2"><strong>First 1,000 users</strong> get discount and advanced features.</p>
+                                    <button class="btn btn-sm btn-success w-100" data-bs-toggle="modal" data-bs-target="#earlyAccessModal">Join Early Access</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="card shadow-sm">
+                                <div class="card-body">
+                                    <h6 class="mb-2">Upcoming Features</h6>
+                                    <p class="small mb-2">Interested in ordering primers when we launch?</p>
+                                    <div class="d-flex align-items-center mb-2">
+                                        <button id="interest-btn" class="btn btn-sm btn-outline-primary me-2">I'd order</button>
+                                        <span class="small text-muted">Interest: <span id="interest-count">0</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Footer -->
                 <footer class="text-center text-muted mt-5">
                     <p>
@@ -916,6 +943,38 @@
                         <span class="text-muted">Primer Designs: <span id="design-count">—</span></span>
                     </p>
                 </footer>
+            </div>
+        </div>
+    </div>
+
+    <!-- Early Access Modal -->
+    <div class="modal fade" id="earlyAccessModal" tabindex="-1" aria-labelledby="earlyAccessModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="earlyAccessModalLabel">Join Early Access</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="form-control" id="ea-name" placeholder="Your name">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="ea-email" placeholder="you@example.com">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone (optional)</label>
+                        <input type="text" class="form-control" id="ea-phone" placeholder="Optional">
+                    </div>
+                    <div class="alert alert-info small">First 1,000 signups receive early access and discounts.</div>
+                    <div id="ea-error" class="text-danger small d-none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" onclick="submitEarlyAccess()">Join Early Access</button>
+                </div>
             </div>
         </div>
     </div>
@@ -971,6 +1030,49 @@
                         interestBtn.textContent = 'Thanks!';
                     }
                 } catch {}
+            });
+        }
+
+        // Handle early access form submission
+        function submitEarlyAccess() {
+            const name = document.getElementById('ea-name').value;
+            const email = document.getElementById('ea-email').value;
+            const phone = document.getElementById('ea-phone').value;
+            
+            if (!name || !email) {
+                alert('Please enter your name and email address');
+                return;
+            }
+
+            fetch('/early-access-signup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: name,
+                    email: email,
+                    phone: phone
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Thank you for joining Early Access! We\'ll be in touch soon.');
+                    // Close modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('earlyAccessModal'));
+                    modal.hide();
+                    // Reset form
+                    document.getElementById('ea-name').value = '';
+                    document.getElementById('ea-email').value = '';
+                    document.getElementById('ea-phone').value = '';
+                } else {
+                    alert('Error: ' + (data.error || 'Please try again'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error submitting form. Please try again.');
             });
         }
     </script>

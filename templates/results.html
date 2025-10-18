@@ -1013,8 +1013,11 @@
             });
         }
 
-        // Fetch stats for footer and interest
-        (async function initStats() {
+        // Real-time analytics system
+        let analyticsInterval;
+
+        // Load stats function
+        async function loadStats() {
             try {
                 const res = await fetch('/stats');
                 const data = await res.json();
@@ -1023,9 +1026,36 @@
                     const ic = document.getElementById('interest-count');
                     if (dc) dc.textContent = data.primer_designs ?? '0';
                     if (ic) ic.textContent = data.order_interest ?? '0';
+                    return data;
                 }
-            } catch {}
-        })();
+            } catch (error) {
+                console.log('Analytics load failed:', error);
+            }
+            return { primer_designs: 0, order_interest: 0 };
+        }
+
+        // Start real-time analytics refresh
+        function startAnalyticsRefresh() {
+            // Load immediately
+            loadStats();
+            
+            // Then refresh every 3 seconds for real-time updates
+            analyticsInterval = setInterval(loadStats, 3000);
+        }
+
+        // Stop analytics refresh (for cleanup)
+        function stopAnalyticsRefresh() {
+            if (analyticsInterval) {
+                clearInterval(analyticsInterval);
+                analyticsInterval = null;
+            }
+        }
+
+        // Initialize analytics on page load
+        document.addEventListener('DOMContentLoaded', startAnalyticsRefresh);
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', stopAnalyticsRefresh);
 
         // Interest button
         const interestBtn = document.getElementById('interest-btn');
@@ -1035,10 +1065,14 @@
                     const res = await fetch('/order-interest', { method: 'POST' });
                     const data = await res.json();
                     if (data && !data.error) {
+                        // Update immediately
                         const ic = document.getElementById('interest-count');
                         if (ic) ic.textContent = data.order_interest ?? '0';
                         interestBtn.disabled = true;
                         interestBtn.textContent = 'Thanks!';
+                        
+                        // Refresh all analytics to sync across pages
+                        loadStats();
                     }
                 } catch {}
             });

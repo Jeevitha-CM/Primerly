@@ -1,2 +1,5 @@
 Flask==2.3.2
+biopython==1.81
+primer3-py==2.2.0
 gunicorn==21.2.0
+numpy>=1.21.0 

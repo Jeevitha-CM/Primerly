@@ -13,9 +13,6 @@ Website: https://www.biovagon.org/
 """
 
 from flask import Flask, render_template, request, jsonify, send_file, redirect, session
-from Bio import Entrez
-from Bio.Seq import Seq
-import primer3
 import csv
 import io
 import re
@@ -23,7 +20,24 @@ import uuid
 from datetime import datetime
 from collections import defaultdict
 import os
+import sys
 import json
+
+# Handle optional imports gracefully
+try:
+    from Bio import Entrez
+    from Bio.Seq import Seq
+    BIO_AVAILABLE = True
+except ImportError:
+    print("WARNING: BioPython not available")
+    BIO_AVAILABLE = False
+
+try:
+    import primer3
+    PRIMER3_AVAILABLE = True
+except ImportError:
+    print("WARNING: primer3-py not available")
+    PRIMER3_AVAILABLE = False
 
 # Application metadata
 __version__ = "1.0.0"
@@ -317,11 +331,36 @@ def visualize_dimer(seq1, seq2, dimer_type="hetero"):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        return f"""
+        <html>
+        <head><title>Primerly - PCR Primer Design Tool</title></head>
+        <body>
+            <h1>Primerly - PCR Primer Design Tool</h1>
+            <p>Welcome to Primerly! The main application is loading...</p>
+            <p>If you see this message, there might be a template issue. Please check the deployment logs.</p>
+            <p>Error: {str(e)}</p>
+        </body>
+        </html>
+        """, 200
 
 @app.route('/health')
 def health():
     return jsonify({'status': 'healthy', 'version': __version__})
+
+@app.route('/debug')
+def debug():
+    return jsonify({
+        'status': 'debug',
+        'version': __version__,
+        'bio_available': BIO_AVAILABLE,
+        'primer3_available': PRIMER3_AVAILABLE,
+        'python_version': str(sys.version),
+        'working_directory': os.getcwd(),
+        'files_in_dir': os.listdir('.')
+    })
 
 @app.route('/fetch-sequence', methods=['POST'])
 def fetch_sequence():

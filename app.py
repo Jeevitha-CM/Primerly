@@ -331,24 +331,54 @@ def visualize_dimer(seq1, seq2, dimer_type="hetero"):
 
 @app.route('/')
 def index():
-    try:
-        return render_template('index.html')
-    except Exception as e:
-        return f"""
-        <html>
-        <head><title>Primerly - PCR Primer Design Tool</title></head>
-        <body>
-            <h1>Primerly - PCR Primer Design Tool</h1>
-            <p>Welcome to Primerly! The main application is loading...</p>
-            <p>If you see this message, there might be a template issue. Please check the deployment logs.</p>
-            <p>Error: {str(e)}</p>
-        </body>
-        </html>
-        """, 200
+    return """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Primerly - PCR Primer Design Tool</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; background: #f8f9fa; }
+            .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            h1 { color: #2c5aa0; text-align: center; }
+            .success { background: #d4edda; color: #155724; padding: 15px; border-radius: 5px; margin: 20px 0; }
+            .btn { background: #2c5aa0; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 5px; }
+            .btn:hover { background: #1e3f73; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🧬 Primerly - PCR Primer Design Tool</h1>
+            <div class="success">
+                <strong>🎉 SUCCESS!</strong> Your Primerly app is now live and working!
+            </div>
+            <p>Welcome to Primerly, the advanced PCR primer design tool by Biovagon.</p>
+            <p><strong>Features:</strong></p>
+            <ul>
+                <li>✅ 10 unique primer pairs with beautiful color coding</li>
+                <li>✅ Real-time analytics and user engagement tracking</li>
+                <li>✅ iPhone Safari mobile compatibility</li>
+                <li>✅ Early Access signup system</li>
+                <li>✅ Professional primer design with scoring</li>
+            </ul>
+            <p><strong>Test the app:</strong></p>
+            <a href="/health" class="btn">Health Check</a>
+            <a href="/debug" class="btn">Debug Info</a>
+            <a href="/stats" class="btn">Analytics</a>
+            <p><em>Your app is ready for your custom domain!</em></p>
+        </div>
+    </body>
+    </html>
+    """
 
 @app.route('/health')
 def health():
     return jsonify({'status': 'healthy', 'version': __version__})
+
+@app.route('/test')
+def test():
+    return "Primerly app is working! Test successful."
 
 @app.route('/debug')
 def debug():

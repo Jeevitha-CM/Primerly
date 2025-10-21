@@ -34,7 +34,16 @@ __copyright__ = "Copyright (c) 2025 Jeevitha C M, Founder of Biovagon"
 __website__ = "https://www.biovagon.org/"
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+
+# Add error handling for production
+@app.errorhandler(404)
+def not_found(error):
+    return render_template('index.html'), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Internal server error'}), 500
 
 # In-memory storage for results (use database for production)
 result_store = {}
@@ -309,6 +318,10 @@ def visualize_dimer(seq1, seq2, dimer_type="hetero"):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy', 'version': __version__})
 
 @app.route('/fetch-sequence', methods=['POST'])
 def fetch_sequence():

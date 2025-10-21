@@ -1,4 +1,5 @@
 primer3-py==2.2.0
 biopython==1.81
 Flask==2.3.2
-gunicorn==21.2.0 
+gunicorn==21.2.0
+Werkzeug==2.3.7 

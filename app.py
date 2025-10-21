@@ -1482,23 +1482,7 @@ def get_complement(sequence):
     complement = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
     return ''.join(complement.get(base, base) for base in sequence)
 
-@app.route('/test')
-def test():
-    """Test route to check if template rendering works"""
-    try:
-        return render_template('results.html', 
-                             primers=[], 
-                             sequence_length=0,
-                             experiment_type='standard_pcr',
-                             sequence='',
-                             highlighted_sequence=[],
-                             individual_highlighted_sequences=[],
-                             orf_info=None,
-                             utr_info=None)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return f"Template error: {str(e)}", 500
+# Removed duplicate test route - using the simpler one above
 
 def calculate_cds_coverage(forward_pos, reverse_pos, orf_info):
     """Calculate what percentage of the CDS is covered by the primer pair"""

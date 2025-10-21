@@ -44,7 +44,9 @@ STATS_FILE = 'site_stats.json'
 EARLY_ACCESS_FILE = 'early_access.csv'
 
 def load_stats():
+    """Load stats from file, with fallback to environment variables for production"""
     try:
+        # Try to load from file first (for local development)
         if os.path.exists(STATS_FILE):
             with open(STATS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
@@ -52,17 +54,35 @@ def load_stats():
                     'primer_designs': int(data.get('primer_designs', 0)),
                     'order_interest': int(data.get('order_interest', 0))
                 }
+        
+        # Fallback to environment variables (for production/Render)
+        primer_designs = int(os.environ.get('PRIMER_DESIGNS', '0'))
+        order_interest = int(os.environ.get('ORDER_INTEREST', '0'))
+        
+        return {
+            'primer_designs': primer_designs,
+            'order_interest': order_interest
+        }
     except Exception as e:
         print(f"DEBUG: Failed to load stats: {e}")
-    return {'primer_designs': 0, 'order_interest': 0}
+        return {'primer_designs': 0, 'order_interest': 0}
 
 def save_stats(stats):
+    """Save stats to file and environment variables for persistence"""
     try:
+        # Save to file (for local development)
         with open(STATS_FILE, 'w', encoding='utf-8') as f:
             json.dump(stats, f)
+        
+        # Also save to environment variables (for production/Render)
+        os.environ['PRIMER_DESIGNS'] = str(stats['primer_designs'])
+        os.environ['ORDER_INTEREST'] = str(stats['order_interest'])
+        
+        print(f"DEBUG: Saved stats - Designs: {stats['primer_designs']}, Interest: {stats['order_interest']}")
     except Exception as e:
         print(f"DEBUG: Failed to save stats: {e}")
 
+# Initialize stats
 site_stats = load_stats()
 
 # Set email for NCBI Entrez (required)
@@ -1258,9 +1278,10 @@ def design_primers():
         
         # Count primer designs (engaged users)
         try:
-            global site_stats
-            site_stats['primer_designs'] += 1
-            save_stats(site_stats)
+            current_stats = load_stats()
+            current_stats['primer_designs'] += 1
+            save_stats(current_stats)
+            print(f"DEBUG: Incremented primer designs to {current_stats['primer_designs']}")
         except Exception as e:
             print(f"DEBUG: Stats error on design: {e}")
         
@@ -1439,19 +1460,28 @@ def version():
 @app.route('/stats')
 def stats():
     try:
-        return jsonify(site_stats)
+        # Always reload stats to ensure we have the latest data
+        current_stats = load_stats()
+        print(f"DEBUG: Stats endpoint called - Designs: {current_stats['primer_designs']}, Interest: {current_stats['order_interest']}")
+        return jsonify(current_stats)
     except Exception as e:
+        print(f"DEBUG: Stats endpoint error: {e}")
         return jsonify({'error': str(e)}), 500
 
 # Order interest poll endpoints
 @app.route('/order-interest', methods=['GET', 'POST'])
 def order_interest():
     try:
-        global site_stats
         if request.method == 'POST':
-            site_stats['order_interest'] += 1
-            save_stats(site_stats)
-        return jsonify({'order_interest': site_stats['order_interest']})
+            # Load current stats
+            current_stats = load_stats()
+            current_stats['order_interest'] += 1
+            save_stats(current_stats)
+            return jsonify({'order_interest': current_stats['order_interest']})
+        else:
+            # GET request - just return current stats
+            current_stats = load_stats()
+            return jsonify({'order_interest': current_stats['order_interest']})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

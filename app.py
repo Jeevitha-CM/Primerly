@@ -1265,7 +1265,7 @@ def design_primers():
             current_stats = load_stats()
             current_stats['primer_designs'] += 1
             save_stats(current_stats)
-            print(f"DEBUG: Primer design count updated to: {current_stats['primer_designs']}")
+            print(f"DEBUG: Primer design count increased to: {current_stats['primer_designs']}")
         except Exception as e:
             print(f"DEBUG: Stats error on design: {e}")
         
@@ -1446,6 +1446,7 @@ def stats():
     try:
         # Always load fresh stats
         current_stats = load_stats()
+        print(f"DEBUG: Returning fresh stats: {current_stats}")
         return jsonify(current_stats)
     except Exception as e:
         print(f"DEBUG: Stats endpoint error: {e}")
@@ -1460,7 +1461,7 @@ def order_interest():
             current_stats = load_stats()
             current_stats['order_interest'] += 1
             save_stats(current_stats)
-            print(f"DEBUG: Order interest count updated to: {current_stats['order_interest']}")
+            print(f"DEBUG: Order interest count increased to: {current_stats['order_interest']}")
             return jsonify({'order_interest': current_stats['order_interest']})
         else:
             # GET request - return current stats

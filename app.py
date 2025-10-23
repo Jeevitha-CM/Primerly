@@ -64,9 +64,8 @@ def save_stats(stats):
     except Exception as e:
         print(f"DEBUG: Failed to save stats: {e}")
 
-# Initialize stats
-site_stats = load_stats()
-print(f"DEBUG: Initial stats loaded: {site_stats}")
+# Initialize stats (will be loaded fresh each time)
+print(f"DEBUG: Stats system initialized")
 
 # Set email for NCBI Entrez (required)
 Entrez.email = "jeevithacm21@gmail.com"

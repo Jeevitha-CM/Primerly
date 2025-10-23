@@ -1009,13 +1009,21 @@
         // Load stats function
         async function loadStats() {
             try {
+                console.log('Loading stats...');
                 const res = await fetch('/stats');
                 const data = await res.json();
+                console.log('Stats response:', data);
                 if (data && !data.error) {
                     const dc = document.getElementById('design-count');
                     const ic = document.getElementById('interest-count');
-                    if (dc) dc.textContent = data.primer_designs ?? '0';
-                    if (ic) ic.textContent = data.order_interest ?? '0';
+                    if (dc) {
+                        dc.textContent = data.primer_designs ?? '0';
+                        console.log('Updated design count to:', data.primer_designs);
+                    }
+                    if (ic) {
+                        ic.textContent = data.order_interest ?? '0';
+                        console.log('Updated interest count to:', data.order_interest);
+                    }
                     return data;
                 }
             } catch (error) {

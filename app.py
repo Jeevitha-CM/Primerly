@@ -169,27 +169,27 @@ def calculate_primer_score(forward_primer, reverse_primer, product_size, experim
     forward_hairpin = primer3.calc_hairpin(forward_primer)
     reverse_hairpin = primer3.calc_hairpin(reverse_primer)
     
-    if forward_hairpin.dg > -2 and reverse_hairpin.dg > -2:
+    if forward_hairpin.dg > -3000 and reverse_hairpin.dg > -3000:
         score += 15
-        explanations.append(f"Clean structure: F hairpin ∆G={forward_hairpin.dg:.1f}, R hairpin ∆G={reverse_hairpin.dg:.1f}")
-    elif forward_hairpin.dg > -3 and reverse_hairpin.dg > -3:
+        explanations.append(f"Clean structure: F hairpin ∆G={forward_hairpin.dg/1000:.1f} kcal/mol, R hairpin ∆G={reverse_hairpin.dg/1000:.1f} kcal/mol")
+    elif forward_hairpin.dg > -3000 and reverse_hairpin.dg > -3000:
         score += 7
-        explanations.append(f"Minor hairpins: F hairpin ∆G={forward_hairpin.dg:.1f}, R hairpin ∆G={reverse_hairpin.dg:.1f}")
+        explanations.append(f"Minor hairpins: F hairpin ∆G={forward_hairpin.dg/1000:.1f} kcal/mol, R hairpin ∆G={reverse_hairpin.dg/1000:.1f} kcal/mol")
     else:
-        explanations.append(f"Hairpin risk: F hairpin ∆G={forward_hairpin.dg:.1f}, R hairpin ∆G={reverse_hairpin.dg:.1f}")
+        explanations.append(f"Hairpin risk: F hairpin ∆G={forward_hairpin.dg/1000:.1f} kcal/mol, R hairpin ∆G={reverse_hairpin.dg/1000:.1f} kcal/mol")
     
     # No 3' self-dimers (10 pts)
     forward_dimer = primer3.calc_homodimer(forward_primer)
     reverse_dimer = primer3.calc_homodimer(reverse_primer)
     
-    if forward_dimer.dg > -2 and reverse_dimer.dg > -2:
+    if forward_dimer.dg > -6000 and reverse_dimer.dg > -6000:
         score += 10
-        explanations.append(f"No self-dimers: F dimer ∆G={forward_dimer.dg:.1f}, R dimer ∆G={reverse_dimer.dg:.1f}")
-    elif forward_dimer.dg > -3 and reverse_dimer.dg > -3:
+        explanations.append(f"No self-dimers: F dimer ∆G={forward_dimer.dg/1000:.1f} kcal/mol, R dimer ∆G={reverse_dimer.dg/1000:.1f} kcal/mol")
+    elif forward_dimer.dg > -6000 and reverse_dimer.dg > -6000:
         score += 5
-        explanations.append(f"Minor self-dimers: F dimer ∆G={forward_dimer.dg:.1f}, R dimer ∆G={reverse_dimer.dg:.1f}")
+        explanations.append(f"Minor self-dimers: F dimer ∆G={forward_dimer.dg/1000:.1f} kcal/mol, R dimer ∆G={reverse_dimer.dg/1000:.1f} kcal/mol")
     else:
-        explanations.append(f"Self-dimer risk: F dimer ∆G={forward_dimer.dg:.1f}, R dimer ∆G={reverse_dimer.dg:.1f}")
+        explanations.append(f"Self-dimer risk: F dimer ∆G={forward_dimer.dg/1000:.1f} kcal/mol, R dimer ∆G={reverse_dimer.dg/1000:.1f} kcal/mol")
     
     # Product size scoring based on experiment type (10 pts)
     if experiment_type == 'qpcr':
@@ -1006,13 +1006,13 @@ def design_primers():
                 'reverse_length': len(reverse_primer),
                 'forward_gc_clamp': forward_gc_clamp,
                 'reverse_gc_clamp': reverse_gc_clamp,
-                'forward_hairpin_dg': round(forward_hairpin.dg, 2),
-                'reverse_hairpin_dg': round(reverse_hairpin.dg, 2),
-                'forward_dimer_dg': round(forward_dimer.dg, 2),
-                'reverse_dimer_dg': round(reverse_dimer.dg, 2),
-                'hetero_dimer_dg': round(hetero_dimer.dg, 2),
-                'hairpin_risky': forward_hairpin.dg < -2 or reverse_hairpin.dg < -2,
-                'dimer_risky': forward_dimer.dg < -6 or reverse_dimer.dg < -6 or hetero_dimer.dg < -7,
+                'forward_hairpin_dg': round(forward_hairpin.dg / 1000, 2),
+                'reverse_hairpin_dg': round(reverse_hairpin.dg / 1000, 2),
+                'forward_dimer_dg': round(forward_dimer.dg / 1000, 2),
+                'reverse_dimer_dg': round(reverse_dimer.dg / 1000, 2),
+                'hetero_dimer_dg': round(hetero_dimer.dg / 1000, 2),
+                'hairpin_risky': forward_hairpin.dg < -3000 or reverse_hairpin.dg < -3000,
+                'dimer_risky': forward_dimer.dg < -6000 or reverse_dimer.dg < -6000 or hetero_dimer.dg < -7000,
                 'summary': get_primer_summary(score, explanations),
                 'forward_secondary': forward_secondary,
                 'reverse_secondary': reverse_secondary,
@@ -1374,8 +1374,8 @@ def analyze_secondary_structures(primer):
     return {
         'hairpin_dg': hairpin.dg,
         'dimer_dg': dimer.dg,
-        'hairpin_risky': hairpin.dg < -2,
-        'dimer_risky': dimer.dg < -6,
+        'hairpin_risky': hairpin.dg < -3000,
+        'dimer_risky': dimer.dg < -6000,
         'hairpin_region': hairpin_region
     }
 

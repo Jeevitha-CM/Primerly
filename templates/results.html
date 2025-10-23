@@ -703,8 +703,10 @@
                                                             </small>
                                                         </td>
                                                         <td>
-                                                            {% if not primer.hairpin_risky %}
+                                                            {% if primer.forward_hairpin_dg > -3 and primer.reverse_hairpin_dg > -3 %}
                                                                 <span class="text-success">✓ No hairpin formation</span>
+                                                            {% elif primer.forward_hairpin_dg <= -3 or primer.reverse_hairpin_dg <= -3 %}
+                                                                <span class="text-warning">⚠ Less than –3 kcal/mol — May form secondary structure — redesign recommended.</span>
                                                             {% else %}
                                                                 <span class="text-danger">✗ Hairpin formation detected</span>
                                                                 <small class="d-block text-muted">May reduce primer efficiency</small>
@@ -720,7 +722,7 @@
                                                         <td>{{ primer.reverse_dimer_dg }} kcal/mol</td>
                                                         <td>
                                                             {% if primer.forward_dimer_dg > -6 and primer.reverse_dimer_dg > -6 %}
-                                                                <span class="text-success">✓ Safe — primer is not strongly sticking to itself.</span>
+                                                                <span class="text-success">✓ Acceptable stability</span>
                                                             {% elif (primer.forward_dimer_dg <= -6 or primer.reverse_dimer_dg <= -6) %}
                                                                 <span class="text-warning">⚠ Less than –6 kcal/mol and sticks at the 3′ end — Might cause issues — consider redesigning.</span>
                                                             {% else %}
@@ -734,8 +736,8 @@
                                                         <td><strong>Hetero-Dimer ΔG</strong></td>
                                                         <td colspan="2" class="text-center">{{ primer.hetero_dimer_dg }} kcal/mol</td>
                                                         <td>
-                                                            {% if primer.hetero_dimer_dg > -6 %}
-                                                                <span class="text-success">✓ Usually fine — primers aren't strongly sticking to each other.</span>
+                                                            {% if primer.hetero_dimer_dg > -7 %}
+                                                                <span class="text-success">✓ Acceptable stability</span>
                                                             {% elif primer.hetero_dimer_dg <= -7 %}
                                                                 <span class="text-warning">⚠ Less than –7 kcal/mol and sticks at the 3′ end — Could interfere with PCR — test first or redesign if needed.</span>
                                                             {% else %}
@@ -843,7 +845,7 @@
                                                 <strong>GC Clamps:</strong> Both primers end with G/C for strong 3' binding
                                             </li>
                                             {% endif %}
-                                            {% if not primer.hairpin_risky %}
+                                            {% if primer.forward_hairpin_dg > -3 and primer.reverse_hairpin_dg > -3 %}
                                             <li class="mb-2">
                                                 <span class="text-success">✓</span> 
                                                 <strong>No Hairpins:</strong> Clean secondary structure for efficient amplification
@@ -855,7 +857,7 @@
                                                 <strong>Safe Self-Dimer:</strong> Minimal self-dimer formation risk
                                             </li>
                                             {% endif %}
-                                            {% if primer.hetero_dimer_dg > -6 %}
+                                            {% if primer.hetero_dimer_dg > -7 %}
                                             <li class="mb-2">
                                                 <span class="text-success">✓</span> 
                                                 <strong>Safe Hetero-Dimer:</strong> Minimal primer-primer interaction

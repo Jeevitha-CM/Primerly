@@ -73,26 +73,15 @@ def init_database():
         count = cursor.fetchone()[0]
         
         if count == 0:
-            # Insert initial data with default values
+            # Insert initial data starting from zero
             cursor.execute('''
                 INSERT INTO analytics (primer_designs, order_interest) 
-                VALUES (?, ?)
-            ''', (DEFAULT_STATS['primer_designs'], DEFAULT_STATS['order_interest']))
-            print(f"DEBUG: Initialized database with default stats: {DEFAULT_STATS}")
+                VALUES (0, 0)
+            ''')
+            print(f"DEBUG: Initialized database with zero stats")
         else:
-            # Ensure existing data meets minimum requirements
-            cursor.execute('SELECT primer_designs, order_interest FROM analytics ORDER BY id DESC LIMIT 1')
-            row = cursor.fetchone()
-            if row:
-                current_designs, current_interest = row
-                if current_designs < DEFAULT_STATS['primer_designs'] or current_interest < DEFAULT_STATS['order_interest']:
-                    cursor.execute('''
-                        UPDATE analytics 
-                        SET primer_designs = ?, order_interest = ?, updated_at = CURRENT_TIMESTAMP
-                        WHERE id = (SELECT id FROM analytics ORDER BY id DESC LIMIT 1)
-                    ''', (max(current_designs, DEFAULT_STATS['primer_designs']), 
-                          max(current_interest, DEFAULT_STATS['order_interest'])))
-                    print(f"DEBUG: Updated database to meet minimum requirements")
+            # Database already has data, no need to modify
+            print(f"DEBUG: Database already initialized")
         
         conn.commit()
         conn.close()
@@ -114,8 +103,8 @@ def load_stats():
         
         if row:
             stats = {
-                'primer_designs': max(int(row[0]), DEFAULT_STATS['primer_designs']),
-                'order_interest': max(int(row[1]), DEFAULT_STATS['order_interest'])
+                'primer_designs': int(row[0]),
+                'order_interest': int(row[1])
             }
             print(f"DEBUG: Loaded stats from database: {stats}")
             conn.close()
@@ -131,12 +120,12 @@ def load_stats():
         return DEFAULT_STATS
 
 def save_stats(stats):
-    """Save stats to database - ensures counts never go backwards"""
+    """Save stats to database - real-time analytics"""
     try:
-        # Ensure stats never go below our minimum values
+        # Save actual stats without minimum enforcement
         safe_stats = {
-            'primer_designs': max(int(stats.get('primer_designs', 0)), DEFAULT_STATS['primer_designs']),
-            'order_interest': max(int(stats.get('order_interest', 0)), DEFAULT_STATS['order_interest'])
+            'primer_designs': int(stats.get('primer_designs', 0)),
+            'order_interest': int(stats.get('order_interest', 0))
         }
         
         conn = sqlite3.connect(DATABASE_FILE)

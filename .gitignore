@@ -164,6 +164,7 @@ secrets.json
 config.json
 .env.production
 .env.local
+SECURITY.md
 
 # User data and analytics
 user_data/

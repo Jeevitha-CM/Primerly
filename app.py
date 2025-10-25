@@ -35,7 +35,7 @@ __copyright__ = "Copyright (c) 2025 Jeevitha C M, Founder of Biovagon"
 __website__ = "https://www.biovagon.org/"
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # In-memory storage for results (use database for production)
 result_store = {}

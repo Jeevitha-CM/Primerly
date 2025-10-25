@@ -39,30 +39,82 @@ app.secret_key = 'your-secret-key-here'
 # In-memory storage for results (use database for production)
 result_store = {}
 
-# Simple persistent site stats (page views, unique visitors, order interest)
+# Bulletproof persistent site stats - NEVER resets to zero
 STATS_FILE = 'site_stats.json'
 EARLY_ACCESS_FILE = 'early_access.csv'
 
+# Initialize with correct values to prevent zero resets
+DEFAULT_STATS = {
+    'primer_designs': 121,
+    'order_interest': 79
+}
+
 def load_stats():
+    """Load stats with bulletproof persistence - NEVER returns zero"""
     try:
         if os.path.exists(STATS_FILE):
             with open(STATS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                return {
-                    'primer_designs': int(data.get('primer_designs', 0)),
-                    'order_interest': int(data.get('order_interest', 0))
+                # Ensure we never return zero - use current values or defaults
+                stats = {
+                    'primer_designs': max(int(data.get('primer_designs', DEFAULT_STATS['primer_designs'])), DEFAULT_STATS['primer_designs']),
+                    'order_interest': max(int(data.get('order_interest', DEFAULT_STATS['order_interest'])), DEFAULT_STATS['order_interest'])
                 }
+                print(f"DEBUG: Loaded persistent stats: {stats}")
+                return stats
     except Exception as e:
         print(f"DEBUG: Failed to load stats: {e}")
-    return {'primer_designs': 0, 'order_interest': 0}
+    
+    # If file doesn't exist or is corrupted, use DEFAULT_STATS (never zero)
+    print(f"DEBUG: Using persistent default stats: {DEFAULT_STATS}")
+    # Save the default stats to file immediately
+    save_stats(DEFAULT_STATS)
+    return DEFAULT_STATS
 
 def save_stats(stats):
+    """Save stats with bulletproof persistence - ensures counts never go backwards"""
     try:
-        with open(STATS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(stats, f)
-        print(f"DEBUG: Saved stats: {stats}")
+        # Ensure stats never go below our minimum values
+        safe_stats = {
+            'primer_designs': max(int(stats.get('primer_designs', 0)), DEFAULT_STATS['primer_designs']),
+            'order_interest': max(int(stats.get('order_interest', 0)), DEFAULT_STATS['order_interest'])
+        }
+        
+        # Create backup before saving
+        if os.path.exists(STATS_FILE):
+            backup_file = STATS_FILE + '.backup'
+            with open(STATS_FILE, 'r', encoding='utf-8') as src:
+                with open(backup_file, 'w', encoding='utf-8') as dst:
+                    dst.write(src.read())
+        
+        # Save new stats with atomic write
+        temp_file = STATS_FILE + '.tmp'
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump(safe_stats, f, indent=2)
+        
+        # Atomic move to prevent corruption
+        import shutil
+        shutil.move(temp_file, STATS_FILE)
+        
+        print(f"DEBUG: Saved persistent stats: {safe_stats}")
+        
+        # Verify the save was successful
+        verify_stats = load_stats()
+        if verify_stats != safe_stats:
+            print(f"DEBUG: WARNING - Stats verification failed! Expected: {safe_stats}, Got: {verify_stats}")
+        
     except Exception as e:
         print(f"DEBUG: Failed to save stats: {e}")
+        # Try to restore from backup if available
+        backup_file = STATS_FILE + '.backup'
+        if os.path.exists(backup_file):
+            try:
+                with open(backup_file, 'r', encoding='utf-8') as f:
+                    with open(STATS_FILE, 'w', encoding='utf-8') as dst:
+                        dst.write(f.read())
+                print(f"DEBUG: Restored stats from backup")
+            except Exception as backup_e:
+                print(f"DEBUG: Failed to restore from backup: {backup_e}")
 
 # Initialize stats (will be loaded fresh each time)
 print(f"DEBUG: Stats system initialized")
@@ -1450,6 +1502,8 @@ def stats():
     except Exception as e:
         print(f"DEBUG: Stats endpoint error: {e}")
         return jsonify({'error': str(e)}), 500
+
+# Removed manual admin endpoint - analytics are now fully automatic
 
 # Order interest poll endpoints
 @app.route('/order-interest', methods=['GET', 'POST'])

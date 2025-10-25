@@ -49,8 +49,36 @@ DEFAULT_STATS = {
     'order_interest': 79
 }
 
+# Environment-based persistent storage (for cloud platforms)
+import os
+def get_persistent_stats():
+    """Get stats from environment variables (cloud) or file (local)"""
+    try:
+        # Try environment variables first (for cloud platforms)
+        env_designs = os.environ.get('PRIMER_DESIGNS', '')
+        env_interest = os.environ.get('ORDER_INTEREST', '')
+        
+        if env_designs and env_interest:
+            stats = {
+                'primer_designs': max(int(env_designs), DEFAULT_STATS['primer_designs']),
+                'order_interest': max(int(env_interest), DEFAULT_STATS['order_interest'])
+            }
+            print(f"DEBUG: Loaded from environment: {stats}")
+            return stats
+    except Exception as e:
+        print(f"DEBUG: Environment load failed: {e}")
+    
+    # Fallback to file system
+    return None
+
 def load_stats():
     """Load stats with bulletproof persistence - NEVER returns zero"""
+    # Try environment variables first (for cloud platforms)
+    env_stats = get_persistent_stats()
+    if env_stats:
+        return env_stats
+    
+    # Fallback to file system (for local development)
     try:
         if os.path.exists(STATS_FILE):
             with open(STATS_FILE, 'r', encoding='utf-8') as f:
@@ -60,10 +88,10 @@ def load_stats():
                     'primer_designs': max(int(data.get('primer_designs', DEFAULT_STATS['primer_designs'])), DEFAULT_STATS['primer_designs']),
                     'order_interest': max(int(data.get('order_interest', DEFAULT_STATS['order_interest'])), DEFAULT_STATS['order_interest'])
                 }
-                print(f"DEBUG: Loaded persistent stats: {stats}")
+                print(f"DEBUG: Loaded persistent stats from file: {stats}")
                 return stats
     except Exception as e:
-        print(f"DEBUG: Failed to load stats: {e}")
+        print(f"DEBUG: Failed to load stats from file: {e}")
     
     # If file doesn't exist or is corrupted, use DEFAULT_STATS (never zero)
     print(f"DEBUG: Using persistent default stats: {DEFAULT_STATS}")
@@ -80,23 +108,54 @@ def save_stats(stats):
             'order_interest': max(int(stats.get('order_interest', 0)), DEFAULT_STATS['order_interest'])
         }
         
-        # Create backup before saving
-        if os.path.exists(STATS_FILE):
-            backup_file = STATS_FILE + '.backup'
-            with open(STATS_FILE, 'r', encoding='utf-8') as src:
-                with open(backup_file, 'w', encoding='utf-8') as dst:
-                    dst.write(src.read())
+        # Save to multiple locations for redundancy
+        success = False
         
-        # Save new stats with atomic write
-        temp_file = STATS_FILE + '.tmp'
-        with open(temp_file, 'w', encoding='utf-8') as f:
-            json.dump(safe_stats, f, indent=2)
+        # 1. Save to file system (local development)
+        try:
+            if os.path.exists(STATS_FILE):
+                backup_file = STATS_FILE + '.backup'
+                with open(STATS_FILE, 'r', encoding='utf-8') as src:
+                    with open(backup_file, 'w', encoding='utf-8') as dst:
+                        dst.write(src.read())
+            
+            temp_file = STATS_FILE + '.tmp'
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                json.dump(safe_stats, f, indent=2)
+            
+            import shutil
+            shutil.move(temp_file, STATS_FILE)
+            success = True
+            print(f"DEBUG: Saved to file system: {safe_stats}")
+        except Exception as e:
+            print(f"DEBUG: File save failed: {e}")
         
-        # Atomic move to prevent corruption
-        import shutil
-        shutil.move(temp_file, STATS_FILE)
+        # 2. Save to environment variables (cloud platforms)
+        try:
+            os.environ['PRIMER_DESIGNS'] = str(safe_stats['primer_designs'])
+            os.environ['ORDER_INTEREST'] = str(safe_stats['order_interest'])
+            print(f"DEBUG: Saved to environment: {safe_stats}")
+            success = True
+        except Exception as e:
+            print(f"DEBUG: Environment save failed: {e}")
         
-        print(f"DEBUG: Saved persistent stats: {safe_stats}")
+        # 3. Save to multiple backup files
+        try:
+            backup_files = [
+                'site_stats_backup1.json',
+                'site_stats_backup2.json',
+                'analytics_data.json'
+            ]
+            for backup_file in backup_files:
+                with open(backup_file, 'w', encoding='utf-8') as f:
+                    json.dump(safe_stats, f, indent=2)
+            print(f"DEBUG: Saved to backup files: {safe_stats}")
+            success = True
+        except Exception as e:
+            print(f"DEBUG: Backup save failed: {e}")
+        
+        if not success:
+            print(f"DEBUG: WARNING - All save methods failed!")
         
         # Verify the save was successful
         verify_stats = load_stats()

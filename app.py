@@ -24,6 +24,7 @@ from datetime import datetime
 from collections import defaultdict
 import os
 import json
+import sqlite3
 
 # Application metadata
 __version__ = "1.0.0"
@@ -39,8 +40,8 @@ app.secret_key = 'your-secret-key-here'
 # In-memory storage for results (use database for production)
 result_store = {}
 
-# Bulletproof persistent site stats - NEVER resets to zero
-STATS_FILE = 'site_stats.json'
+# Database-based real-time analytics - NEVER resets to zero
+DATABASE_FILE = 'analytics.db'
 EARLY_ACCESS_FILE = 'early_access.csv'
 
 # Initialize with correct values to prevent zero resets
@@ -49,58 +50,88 @@ DEFAULT_STATS = {
     'order_interest': 79
 }
 
-# Environment-based persistent storage (for cloud platforms)
-import os
-def get_persistent_stats():
-    """Get stats from environment variables (cloud) or file (local)"""
+# Database-based real-time analytics system
+def init_database():
+    """Initialize SQLite database for analytics"""
     try:
-        # Try environment variables first (for cloud platforms)
-        env_designs = os.environ.get('PRIMER_DESIGNS', '')
-        env_interest = os.environ.get('ORDER_INTEREST', '')
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
         
-        if env_designs and env_interest:
-            stats = {
-                'primer_designs': max(int(env_designs), DEFAULT_STATS['primer_designs']),
-                'order_interest': max(int(env_interest), DEFAULT_STATS['order_interest'])
-            }
-            print(f"DEBUG: Loaded from environment: {stats}")
-            return stats
+        # Create analytics table if it doesn't exist
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS analytics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                primer_designs INTEGER DEFAULT 0,
+                order_interest INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Check if we have any data
+        cursor.execute('SELECT COUNT(*) FROM analytics')
+        count = cursor.fetchone()[0]
+        
+        if count == 0:
+            # Insert initial data with default values
+            cursor.execute('''
+                INSERT INTO analytics (primer_designs, order_interest) 
+                VALUES (?, ?)
+            ''', (DEFAULT_STATS['primer_designs'], DEFAULT_STATS['order_interest']))
+            print(f"DEBUG: Initialized database with default stats: {DEFAULT_STATS}")
+        else:
+            # Ensure existing data meets minimum requirements
+            cursor.execute('SELECT primer_designs, order_interest FROM analytics ORDER BY id DESC LIMIT 1')
+            row = cursor.fetchone()
+            if row:
+                current_designs, current_interest = row
+                if current_designs < DEFAULT_STATS['primer_designs'] or current_interest < DEFAULT_STATS['order_interest']:
+                    cursor.execute('''
+                        UPDATE analytics 
+                        SET primer_designs = ?, order_interest = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = (SELECT id FROM analytics ORDER BY id DESC LIMIT 1)
+                    ''', (max(current_designs, DEFAULT_STATS['primer_designs']), 
+                          max(current_interest, DEFAULT_STATS['order_interest'])))
+                    print(f"DEBUG: Updated database to meet minimum requirements")
+        
+        conn.commit()
+        conn.close()
+        print("DEBUG: Database initialized successfully")
+        return True
+        
     except Exception as e:
-        print(f"DEBUG: Environment load failed: {e}")
-    
-    # Fallback to file system
-    return None
+        print(f"DEBUG: Database initialization failed: {e}")
+        return False
 
 def load_stats():
-    """Load stats with bulletproof persistence - NEVER returns zero"""
-    # Try environment variables first (for cloud platforms)
-    env_stats = get_persistent_stats()
-    if env_stats:
-        return env_stats
-    
-    # Fallback to file system (for local development)
+    """Load stats from database - NEVER returns zero"""
     try:
-        if os.path.exists(STATS_FILE):
-            with open(STATS_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # Ensure we never return zero - use current values or defaults
-                stats = {
-                    'primer_designs': max(int(data.get('primer_designs', DEFAULT_STATS['primer_designs'])), DEFAULT_STATS['primer_designs']),
-                    'order_interest': max(int(data.get('order_interest', DEFAULT_STATS['order_interest'])), DEFAULT_STATS['order_interest'])
-                }
-                print(f"DEBUG: Loaded persistent stats from file: {stats}")
-                return stats
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT primer_designs, order_interest FROM analytics ORDER BY id DESC LIMIT 1')
+        row = cursor.fetchone()
+        
+        if row:
+            stats = {
+                'primer_designs': max(int(row[0]), DEFAULT_STATS['primer_designs']),
+                'order_interest': max(int(row[1]), DEFAULT_STATS['order_interest'])
+            }
+            print(f"DEBUG: Loaded stats from database: {stats}")
+            conn.close()
+            return stats
+        else:
+            # No data found, initialize with defaults
+            print(f"DEBUG: No data in database, using defaults: {DEFAULT_STATS}")
+            conn.close()
+            return DEFAULT_STATS
+            
     except Exception as e:
-        print(f"DEBUG: Failed to load stats from file: {e}")
-    
-    # If file doesn't exist or is corrupted, use DEFAULT_STATS (never zero)
-    print(f"DEBUG: Using persistent default stats: {DEFAULT_STATS}")
-    # Save the default stats to file immediately
-    save_stats(DEFAULT_STATS)
-    return DEFAULT_STATS
+        print(f"DEBUG: Failed to load stats from database: {e}")
+        return DEFAULT_STATS
 
 def save_stats(stats):
-    """Save stats with bulletproof persistence - ensures counts never go backwards"""
+    """Save stats to database - ensures counts never go backwards"""
     try:
         # Ensure stats never go below our minimum values
         safe_stats = {
@@ -108,75 +139,57 @@ def save_stats(stats):
             'order_interest': max(int(stats.get('order_interest', 0)), DEFAULT_STATS['order_interest'])
         }
         
-        # Save to multiple locations for redundancy
-        success = False
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
         
-        # 1. Save to file system (local development)
-        try:
-            if os.path.exists(STATS_FILE):
-                backup_file = STATS_FILE + '.backup'
-                with open(STATS_FILE, 'r', encoding='utf-8') as src:
-                    with open(backup_file, 'w', encoding='utf-8') as dst:
-                        dst.write(src.read())
-            
-            temp_file = STATS_FILE + '.tmp'
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                json.dump(safe_stats, f, indent=2)
-            
-            import shutil
-            shutil.move(temp_file, STATS_FILE)
-            success = True
-            print(f"DEBUG: Saved to file system: {safe_stats}")
-        except Exception as e:
-            print(f"DEBUG: File save failed: {e}")
+        # Update the latest record
+        cursor.execute('''
+            UPDATE analytics 
+            SET primer_designs = ?, order_interest = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = (SELECT id FROM analytics ORDER BY id DESC LIMIT 1)
+        ''', (safe_stats['primer_designs'], safe_stats['order_interest']))
         
-        # 2. Save to environment variables (cloud platforms)
-        try:
-            os.environ['PRIMER_DESIGNS'] = str(safe_stats['primer_designs'])
-            os.environ['ORDER_INTEREST'] = str(safe_stats['order_interest'])
-            print(f"DEBUG: Saved to environment: {safe_stats}")
-            success = True
-        except Exception as e:
-            print(f"DEBUG: Environment save failed: {e}")
-        
-        # 3. Save to multiple backup files
-        try:
-            backup_files = [
-                'site_stats_backup1.json',
-                'site_stats_backup2.json',
-                'analytics_data.json'
-            ]
-            for backup_file in backup_files:
-                with open(backup_file, 'w', encoding='utf-8') as f:
-                    json.dump(safe_stats, f, indent=2)
-            print(f"DEBUG: Saved to backup files: {safe_stats}")
-            success = True
-        except Exception as e:
-            print(f"DEBUG: Backup save failed: {e}")
-        
-        if not success:
-            print(f"DEBUG: WARNING - All save methods failed!")
-        
-        # Verify the save was successful
-        verify_stats = load_stats()
-        if verify_stats != safe_stats:
-            print(f"DEBUG: WARNING - Stats verification failed! Expected: {safe_stats}, Got: {verify_stats}")
+        conn.commit()
+        conn.close()
+        print(f"DEBUG: Saved stats to database: {safe_stats}")
+        return True
         
     except Exception as e:
-        print(f"DEBUG: Failed to save stats: {e}")
-        # Try to restore from backup if available
-        backup_file = STATS_FILE + '.backup'
-        if os.path.exists(backup_file):
-            try:
-                with open(backup_file, 'r', encoding='utf-8') as f:
-                    with open(STATS_FILE, 'w', encoding='utf-8') as dst:
-                        dst.write(f.read())
-                print(f"DEBUG: Restored stats from backup")
-            except Exception as backup_e:
-                print(f"DEBUG: Failed to restore from backup: {backup_e}")
+        print(f"DEBUG: Failed to save stats to database: {e}")
+        return False
 
-# Initialize stats (will be loaded fresh each time)
-print(f"DEBUG: Stats system initialized")
+def increment_stat(stat_type):
+    """Increment a specific stat in the database"""
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        
+        if stat_type == 'primer_designs':
+            cursor.execute('''
+                UPDATE analytics 
+                SET primer_designs = primer_designs + 1, updated_at = CURRENT_TIMESTAMP
+                WHERE id = (SELECT id FROM analytics ORDER BY id DESC LIMIT 1)
+            ''')
+        elif stat_type == 'order_interest':
+            cursor.execute('''
+                UPDATE analytics 
+                SET order_interest = order_interest + 1, updated_at = CURRENT_TIMESTAMP
+                WHERE id = (SELECT id FROM analytics ORDER BY id DESC LIMIT 1)
+            ''')
+        
+        conn.commit()
+        conn.close()
+        print(f"DEBUG: Incremented {stat_type} in database")
+        return True
+        
+    except Exception as e:
+        print(f"DEBUG: Failed to increment {stat_type}: {e}")
+        return False
+
+# Initialize database on startup
+init_database()
+site_stats = load_stats()
+print("DEBUG: Database analytics system initialized")
 
 # Set email for NCBI Entrez (required)
 Entrez.email = "jeevithacm21@gmail.com"
@@ -1371,11 +1384,9 @@ def design_primers():
         
         # Count primer designs (engaged users)
         try:
-            # Load fresh stats
-            current_stats = load_stats()
-            current_stats['primer_designs'] += 1
-            save_stats(current_stats)
-            print(f"DEBUG: Primer design count increased to: {current_stats['primer_designs']}")
+            # Increment primer designs in database
+            increment_stat('primer_designs')
+            print(f"DEBUG: Primer design count incremented in database")
         except Exception as e:
             print(f"DEBUG: Stats error on design: {e}")
         
@@ -1569,12 +1580,12 @@ def stats():
 def order_interest():
     try:
         if request.method == 'POST':
-            # Load fresh stats
+            # Increment order interest in database
+            increment_stat('order_interest')
+            # Return fresh stats
             current_stats = load_stats()
-            current_stats['order_interest'] += 1
-            save_stats(current_stats)
             print(f"DEBUG: Order interest count increased to: {current_stats['order_interest']}")
-            return jsonify({'order_interest': current_stats['order_interest']})
+            return jsonify(current_stats)
         else:
             # GET request - return current stats
             current_stats = load_stats()

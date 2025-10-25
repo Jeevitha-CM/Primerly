@@ -155,6 +155,7 @@ downloads/
 # Sensitive data - NEVER commit these
 site_stats.json
 early_access.csv
+analytics.db
 *.key
 *.pem
 *.p12

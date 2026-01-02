@@ -40,7 +40,7 @@ python app.py
 ```
 
 ### Usage
-1. Open your browser and navigate to `http://127.0.0.1:5000`
+1. Open your browser and navigate to `https://primerly.onrender.com/`
 2. Choose your experiment type (Standard PCR or qPCR)
 3. Select your mode (Beginner or Expert)
 4. Enter your sequence or NCBI accession number
@@ -99,17 +99,6 @@ Primerly implements industry-standard primer design algorithms based on:
 - **GC Clamp**: 3' end stability for efficient extension
 - **Secondary Structures**: Hairpin and dimer analysis
 - **Product Size**: Optimized for different experiment types
-
-## 🌐 Deployment Options
-
-### Web Application
-- **Heroku**: Free tier available
-- **PythonAnywhere**: Free hosting for Python apps
-- **VPS**: Custom server deployment
-
-### Desktop Application
-- **PyInstaller**: Standalone executable
-- **Tkinter**: Native desktop interface
 
 ## 🤝 Contributing
 
